@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { 
   Wheat, Building2, BarChart3, Landmark, Plus, Settings, AlertTriangle, Briefcase, Beaker 
@@ -109,7 +108,7 @@ const App: React.FC = () => {
 
             <Card className="bg-stone-900 border-stone-800" title="市场导航">
               <div className="space-y-1">
-                <Button className="w-full justify-start" variant={activeTab === 'commodities' ? 'primary' : 'secondary'} onClick={() => setActiveTab('commodities')}><Wheat size={16}/> 商品现货 & LOB</Button>
+                <Button className="w-full justify-start" variant={activeTab === 'commodities' ? 'primary' : 'secondary'} onClick={() => setActiveTab('commodities')}><Wheat size={16}/> 现货市场 (LOB)</Button>
                 <Button className="w-full justify-start" variant={activeTab === 'companies' ? 'primary' : 'secondary'} onClick={() => setActiveTab('companies')}><Building2 size={16}/> 股票交易所</Button>
                 <Button className="w-full justify-start" variant={activeTab === 'banking' ? 'primary' : 'secondary'} onClick={() => setActiveTab('banking')}><Briefcase size={16}/> 央行与信贷</Button>
                 <Button className="w-full justify-start" variant={activeTab === 'stats' ? 'primary' : 'secondary'} onClick={() => setActiveTab('stats')}><BarChart3 size={16}/> 宏观数据</Button>

@@ -105,13 +105,12 @@ export class FinancialSystem {
         day: state.day,
         gdp: parseFloat(gdp.toFixed(2)),
         consumption: parseFloat(totalConsumptionValue.toFixed(2)),
-        investment: 0, // Todo: track capex
+        investment: 0, 
         cpi: parseFloat(cpi.toFixed(2)),
         inflation: parseFloat(inflation.toFixed(4)),
         unemployment: parseFloat(unemploymentRate.toFixed(4))
     });
 
-    // Prune history to save memory but keep enough for volatility calcs (e.g., 365 days)
     if (state.macroHistory.length > 365) state.macroHistory.shift();
     // ------------------------------------------------
 
@@ -136,7 +135,7 @@ export class FinancialSystem {
       let status: 'AUSTERITY' | 'NEUTRAL' | 'STIMULUS' = 'NEUTRAL';
       let actionLog = "";
 
-      // Optimization: Lookup deputy via context map if possible, but finding by Job is fast with indices
+      // Optimization: Lookup deputy via context map if possible
       const deputy = context.residentsByJob['DEPUTY_MAYOR']?.[0];
       
       let welfareBudget = 0;
@@ -154,7 +153,30 @@ export class FinancialSystem {
       
       treasury.taxPolicy.grainSubsidy = welfareBudget;
 
-      if (hoardingRatio > 0.25) {
+      // SAFETY NET: Quantitative Easing (QE) if velocity is dead
+      // If GDP is near zero but Money Supply exists, it means liquidity trap.
+      // Print money and give it to poor people.
+      const lastGdp = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].gdp : 100;
+      if (lastGdp < 10) {
+          status = 'STIMULUS';
+          const bailout = 1000;
+          treasury.cash += bailout;
+          state.economicOverview.totalSystemGold += bailout; // Magic money printing
+          
+          const poor = state.population.residents.filter(r => r.cash < 5);
+          if (poor.length > 0) {
+              const amount = bailout / poor.length;
+              poor.forEach(r => {
+                  Transaction.transfer('TREASURY', r, amount, { treasury, residents: state.population.residents, context });
+              });
+              actionLog += `【紧急】经济停摆，央行直升机撒钱 (${Math.floor(amount)} oz/人); `;
+          } else {
+               // Give to companies if residents have money but no production
+               state.companies.forEach(c => c.cash += 200);
+               actionLog += `【紧急】企业纾困注资; `;
+          }
+      } 
+      else if (hoardingRatio > 0.25) {
           status = 'STIMULUS';
           treasury.taxPolicy.incomeTaxRate = Math.max(0.05, treasury.taxPolicy.incomeTaxRate - 0.01);
           treasury.taxPolicy.corporateTaxRate = Math.max(0.10, treasury.taxPolicy.corporateTaxRate - 0.01);

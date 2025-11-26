@@ -1,3 +1,4 @@
+
 import React, { memo } from 'react';
 import { TrendingUp, Wallet, Calendar, Pause, Coffee } from 'lucide-react';
 import { GameState, LivingStandard } from '../shared/types';
@@ -23,7 +24,7 @@ export const Header = memo<HeaderProps>(({
             <TrendingUp size={20} />
          </div>
          <div>
-           <h1 className="text-lg font-bold text-stone-100">伊甸谷 <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">CHAOS MODE</span></h1>
+           <h1 className="text-lg font-bold text-stone-100">伊甸谷 <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">混沌模式</span></h1>
          </div>
       </div>
 
@@ -50,7 +51,7 @@ export const Header = memo<HeaderProps>(({
          </div>
          <div className="flex items-center gap-2 text-stone-400 bg-stone-800/50 px-3 py-1.5 rounded">
             <Calendar size={14} />
-            Day {gameState.day}
+            第 {gameState.day} 天
          </div>
          
          <div className="flex items-center bg-stone-800 rounded-lg p-1 gap-1 border border-stone-700">

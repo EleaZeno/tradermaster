@@ -28,16 +28,16 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                         <Building2 size={24} className="text-emerald-500" />
                     </div>
                     <div>
-                        <div className="text-sm text-stone-500">Reserves</div>
+                        <div className="text-sm text-stone-500">总储备金 (Reserves)</div>
                         <div className="text-2xl font-bold font-mono text-emerald-400">{Math.floor(bank.reserves).toLocaleString()} oz</div>
                     </div>
                 </div>
             </Card>
 
-            <Card className="bg-stone-900 border-stone-800" title="货币政策驾驶舱 (Taylor Rule)">
+            <Card className="bg-stone-900 border-stone-800" title="货币政策驾驶舱 (泰勒规则)">
                  <div className="space-y-2">
                      <div className="flex justify-between items-center text-xs">
-                         <label className="text-stone-400">Target Inflation (Annual)</label>
+                         <label className="text-stone-400">目标通胀率 (年化)</label>
                          <input 
                             type="number" step="0.01" 
                             className="w-16 bg-stone-950 border border-stone-700 rounded px-1 text-right text-white"
@@ -46,7 +46,7 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                          />
                      </div>
                      <div className="flex justify-between items-center text-xs">
-                         <label className="text-stone-400">Target Unemployment</label>
+                         <label className="text-stone-400">目标失业率</label>
                          <input 
                             type="number" step="0.01" 
                             className="w-16 bg-stone-950 border border-stone-700 rounded px-1 text-right text-white"
@@ -54,7 +54,7 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                             onChange={(e) => setTargetUnemployment(parseFloat(e.target.value))}
                          />
                      </div>
-                     <Button size="sm" className="w-full mt-1" onClick={handleApply}>Update Targets</Button>
+                     <Button size="sm" className="w-full mt-1" onClick={handleApply}>更新政策目标</Button>
                  </div>
             </Card>
 
@@ -64,14 +64,14 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                         <DollarSign size={24} className="text-amber-500" />
                     </div>
                     <div>
-                        <div className="text-sm text-stone-500">Outstanding Loans</div>
+                        <div className="text-sm text-stone-500">未偿信贷总额</div>
                         <div className="text-2xl font-bold font-mono text-amber-400">{Math.floor(bank.totalLoans).toLocaleString()} oz</div>
                     </div>
                 </div>
             </Card>
         </div>
 
-        <Card title="宏观调控数据 (Rates & Inflation)" className="bg-stone-900 border-stone-800 h-80">
+        <Card title="宏观调控数据 (利率 & 通胀)" className="bg-stone-900 border-stone-800 h-80">
             <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={bank.history}>
                     <defs>
@@ -87,9 +87,9 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                         contentStyle={{backgroundColor: '#1c1917', border: '1px solid #444', fontSize: '12px'}}
                         labelStyle={{color: '#9ca3af'}}
                     />
-                    <Area yAxisId="left" type="monotone" dataKey="reserves" stroke="#10b981" fillOpacity={1} fill="url(#colorReserves)" name="Reserves" />
-                    <Line yAxisId="right" type="monotone" dataKey="rates" stroke="#f59e0b" dot={false} strokeWidth={2} name="Interest Rate" />
-                    <Line yAxisId="right" type="monotone" dataKey="inflation" stroke="#ef4444" dot={false} strokeWidth={2} name="Inflation (W)" />
+                    <Area yAxisId="left" type="monotone" dataKey="reserves" stroke="#10b981" fillOpacity={1} fill="url(#colorReserves)" name="储备金" />
+                    <Line yAxisId="right" type="monotone" dataKey="rates" stroke="#f59e0b" dot={false} strokeWidth={2} name="基准利率" />
+                    <Line yAxisId="right" type="monotone" dataKey="inflation" stroke="#ef4444" dot={false} strokeWidth={2} name="通胀率 (周)" />
                 </ComposedChart>
             </ResponsiveContainer>
         </Card>
@@ -100,10 +100,10 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                     <table className="w-full text-xs text-left text-stone-400">
                         <thead className="text-stone-500 uppercase bg-stone-950 sticky top-0">
                             <tr>
-                                <th className="px-4 py-2">Loan ID</th>
-                                <th className="px-4 py-2">Borrower</th>
-                                <th className="px-4 py-2 text-right">Remaining</th>
-                                <th className="px-4 py-2 text-right">Due Date</th>
+                                <th className="px-4 py-2">贷款ID</th>
+                                <th className="px-4 py-2">借款人</th>
+                                <th className="px-4 py-2 text-right">剩余本金</th>
+                                <th className="px-4 py-2 text-right">到期日</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -116,7 +116,7 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                                 </tr>
                             ))}
                             {bank.loans.length === 0 && (
-                                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-600">No active loans</td></tr>
+                                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-600">无活跃贷款</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -128,9 +128,9 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                     <table className="w-full text-xs text-left text-stone-400">
                         <thead className="text-stone-500 uppercase bg-stone-950 sticky top-0">
                             <tr>
-                                <th className="px-4 py-2">Account</th>
-                                <th className="px-4 py-2 text-right">Balance</th>
-                                <th className="px-4 py-2 text-right">APY</th>
+                                <th className="px-4 py-2">账户</th>
+                                <th className="px-4 py-2 text-right">余额</th>
+                                <th className="px-4 py-2 text-right">年化利率(APY)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -142,7 +142,7 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                                 </tr>
                             ))}
                              {bank.deposits.length === 0 && (
-                                <tr><td colSpan={3} className="px-4 py-4 text-center text-stone-600">No active deposits</td></tr>
+                                <tr><td colSpan={3} className="px-4 py-4 text-center text-stone-600">无活跃存款</td></tr>
                             )}
                         </tbody>
                     </table>

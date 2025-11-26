@@ -5,6 +5,7 @@ import { ProductionSystem } from './systems/ProductionSystem';
 import { ConsumerSystem } from './systems/ConsumerSystem';
 import { FinancialSystem } from './systems/FinancialSystem';
 import { BankingSystem } from './systems/BankingSystem';
+import { MarketSystem } from './systems/MarketSystem';
 
 /**
  * Main Game Loop Processor
@@ -54,6 +55,9 @@ export const processGameTick = (gameState: GameState): void => {
         });
         return modifier;
     };
+
+    // 0. Market Maintenance (Crucial for preventing liquidity locks)
+    MarketSystem.pruneStaleOrders(gameState, context);
 
     // 0. Banking System (Credit Creation/Destruction)
     BankingSystem.process(gameState, context);

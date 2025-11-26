@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ResourceItem, ProductItem, OrderBook } from '../../shared/types';
 import { useGameStore } from '../../shared/store/useGameStore';
@@ -31,7 +32,7 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
                     <TrendingUp size={24} className={isRising ? "text-emerald-400" : "text-red-400"} />
                  </div>
                  <div>
-                     <h2 className="text-xl font-bold text-white tracking-tight">{item.name} <span className="text-stone-500 text-sm font-normal ml-2">LOB Market</span></h2>
+                     <h2 className="text-xl font-bold text-white tracking-tight">{item.name} <span className="text-stone-500 text-sm font-normal ml-2">订单簿交易 (LOB)</span></h2>
                      <div className="flex items-center gap-2 text-sm font-mono">
                          <span className="text-2xl text-white">{currentPrice.toFixed(2)}</span>
                          <span className={`px-1.5 py-0.5 rounded ${isRising ? 'bg-emerald-950 text-emerald-400' : 'bg-red-950 text-red-400'}`}>
@@ -56,8 +57,8 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
              {/* Right: Order Book */}
              <div className="w-[300px] bg-stone-900 flex flex-col">
                  <div className="p-2 bg-stone-800 text-xs font-bold text-stone-400 flex justify-between">
-                     <span>Price</span>
-                     <span>Size</span>
+                     <span>价格 (Price)</span>
+                     <span>数量 (Size)</span>
                  </div>
                  
                  {/* Asks (Sells) - Red - Sorted Ascending (Lowest Price at bottom) */}
@@ -73,7 +74,7 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
 
                  {/* Spread Info */}
                  <div className="p-2 bg-stone-950 text-center font-mono text-sm border-y border-stone-800">
-                     <span className="text-stone-500">Spread: </span>
+                     <span className="text-stone-500">价差 (Spread): </span>
                      <span className="text-white">
                          {book.asks.length > 0 && book.bids.length > 0 
                             ? (book.asks[0].price - book.bids[0].price).toFixed(2) 
@@ -97,20 +98,20 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
           <div className="p-4 bg-stone-900 border-t border-stone-800 grid grid-cols-2 gap-4">
               <div className="flex flex-col justify-center text-xs text-stone-500 px-2">
                  <div className="flex justify-between">
-                    <span>Your Balance</span>
+                    <span>你的余额</span>
                     <span className="text-amber-400">{cash.toFixed(1)} oz</span>
                  </div>
                  <div className="flex justify-between">
-                     <span>Your Inventory</span>
+                     <span>你的库存</span>
                      <span className="text-blue-300">{item.owned}</span>
                  </div>
               </div>
               <div className="flex gap-2">
                   <Button className="flex-1 h-12 text-lg" variant="success" onClick={() => onTrade('buy', item.id)} disabled={cash < currentPrice}>
-                     Buy (Mkt)
+                     市价买入
                   </Button>
                   <Button className="flex-1 h-12 text-lg" variant="danger" onClick={() => onTrade('sell', item.id)} disabled={item.owned <= 0}>
-                     Sell (Mkt)
+                     市价卖出
                   </Button>
               </div>
           </div>
