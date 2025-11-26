@@ -71,6 +71,33 @@ export interface FuturesPosition {
 
 export type FuturesContract = FuturesPosition;
 
+export interface Loan {
+  id: string;
+  borrowerId: string;
+  principal: number;
+  remainingPrincipal: number;
+  interestRate: number; // Daily rate
+  dueDate: number;
+}
+
+export interface Deposit {
+  id: string;
+  ownerId: string;
+  amount: number;
+  interestRate: number;
+}
+
+export interface Bank {
+  reserves: number;
+  totalDeposits: number;
+  totalLoans: number;
+  depositRate: number; // Daily
+  loanRate: number;    // Daily
+  loans: Loan[];
+  deposits: Deposit[];
+  history: { day: number; reserves: number; rates: number }[];
+}
+
 export interface Resident {
   id: string;
   name: string;
@@ -86,6 +113,9 @@ export interface Resident {
   happiness: number;
   livingStandard: LivingStandard; 
   timePreference: number; 
+  // Economic Parameters
+  reservationWage: number;
+  propensityToConsume: number; // 0.0 to 1.0 (MPC)
   needs: Record<string, number>; 
   inventory: Partial<Record<string, number>>;
   portfolio: Record<string, number>; 
@@ -320,6 +350,7 @@ export interface GameState {
   day: number;
   mayorId: string | null;
   cityTreasury: CityTreasury;
+  bank: Bank;
   election: Election;
   population: PopulationState;
   resources: Record<ResourceType, ResourceItem>;

@@ -2,7 +2,7 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { GameState, Company, ResourceType, ProductType, IndustryType, Resident, FuturesContract, MarketEvent, OrderBook } from '../types';
-import { INITIAL_CITY_TREASURY, INITIAL_RESOURCES, INITIAL_PRODUCTS, INITIAL_COMPANIES, INITIAL_FUNDS, INITIAL_POPULATION, INITIAL_ELECTION } from '../shared/initialState';
+import { INITIAL_CITY_TREASURY, INITIAL_RESOURCES, INITIAL_PRODUCTS, INITIAL_COMPANIES, INITIAL_FUNDS, INITIAL_POPULATION, INITIAL_ELECTION, INITIAL_BANK } from '../shared/initialState';
 import { GAME_CONFIG } from '../shared/config';
 import { processGameTick } from '../domain/gameLogic';
 import { MarketSystem } from '../domain/systems/MarketSystem';
@@ -52,6 +52,7 @@ const INITIAL_STATE_FULL: GameState = {
     day: 1,
     mayorId: 'res_mayor',
     cityTreasury: INITIAL_CITY_TREASURY,
+    bank: INITIAL_BANK,
     election: INITIAL_ELECTION,
     population: INITIAL_POPULATION,
     resources: INITIAL_RESOURCES,
@@ -83,7 +84,7 @@ export const useGameStore = create<GameStore>()(
     setGameSpeed: (speed) => set((state) => { state.gameSpeed = speed }),
 
     tick: () => set((state) => {
-        processGameTick(state.gameState);
+        processGameTick(state.gameState as any);
         if (state.gameState.logs.length > 50) state.gameState.logs = state.gameState.logs.slice(0, 50);
     }),
 
@@ -109,7 +110,7 @@ export const useGameStore = create<GameStore>()(
           let amount = isRes ? 10 : 1; 
 
           // Player trading via Order Book
-          MarketSystem.submitOrder(state.gameState, {
+          MarketSystem.submitOrder(state.gameState as any, {
               ownerId: playerRes.id,
               ownerType: 'RESIDENT',
               itemId: itemId,
@@ -149,7 +150,7 @@ export const useGameStore = create<GameStore>()(
                 monthlySalesVolume: 0, monthlyProductionVolume: 0, lastRevenue: 0, lastProfit: 0,
                 reports: [], history: [{ day: state.gameState.day, open: 1.0, high: 1.0, low: 1.0, close: 1.0, volume: 0 }],
                 // @ts-ignore
-                type: 'CORPORATION', wageStructure: 'PERFORMANCE', ceoId: 'res_player', isBankrupt: false
+                type: 'CORPORATION', wageStructure: 'PERFORMANCE', ceoId: 'res_player', isBankrupt: false, landTokens: 0
             });
 
             // Init Market
@@ -169,7 +170,7 @@ export const useGameStore = create<GameStore>()(
         if (!player) return;
         
         if (!isFund) {
-            MarketSystem.submitOrder(state.gameState, {
+            MarketSystem.submitOrder(state.gameState as any, {
                 ownerId: player.id,
                 ownerType: 'RESIDENT',
                 itemId: id,
@@ -186,7 +187,7 @@ export const useGameStore = create<GameStore>()(
          const player = state.gameState.population.residents.find(r => r.isPlayer);
          if (!player) return;
          
-         MarketSystem.submitOrder(state.gameState, {
+         MarketSystem.submitOrder(state.gameState as any, {
             ownerId: player.id,
             ownerType: 'RESIDENT',
             itemId: id,

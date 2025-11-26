@@ -1,7 +1,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ProductionSystem } from '../../../domain/systems/ProductionSystem';
-import { GameState, ResourceType, ProductType, FlowStats, OrderBook } from '../../../shared/types';
+import { GameState, ResourceType, ProductType, FlowStats, OrderBook, GameContext } from '../../../shared/types';
 import { INITIAL_POPULATION, INITIAL_COMPANIES, INITIAL_RESOURCES, INITIAL_PRODUCTS, INITIAL_CITY_TREASURY } from '../../../shared/initialState';
 
 // Helper to create empty books
@@ -12,6 +12,7 @@ const createEmptyBook = (price: number): OrderBook => ({
 const createMockState = (): GameState => ({
     day: 1, cash: 100, mayorId: 'res_mayor',
     cityTreasury: JSON.parse(JSON.stringify(INITIAL_CITY_TREASURY)),
+    bank: { reserves: 1000, totalDeposits: 0, totalLoans: 0, depositRate: 0.001, loanRate: 0.003, loans: [], deposits: [], history: [] },
     election: { active: false, cycle: 1, nextDate: 10, candidates: [], winnerId: null },
     population: JSON.parse(JSON.stringify(INITIAL_POPULATION)),
     resources: JSON.parse(JSON.stringify(INITIAL_RESOURCES)),
@@ -29,12 +30,23 @@ const createMockState = (): GameState => ({
     }
 });
 
+const createMockContext = (state: GameState): GameContext => {
+    return {
+        residentMap: new Map(state.population.residents.map(r => [r.id, r])),
+        companyMap: new Map(state.companies.map(c => [c.id, c])),
+        employeesByCompany: {},
+        residentsByJob: {}
+    };
+};
+
 describe('ProductionSystem', () => {
     let mockState: GameState;
     let flowStats: FlowStats;
+    let mockContext: GameContext;
 
     beforeEach(() => {
         mockState = createMockState();
+        mockContext = createMockContext(mockState);
         flowStats = {
             [ResourceType.GRAIN]: { produced: 0, consumed: 0, spoiled: 0 },
             [ProductType.BREAD]: { produced: 0, consumed: 0, spoiled: 0 }
@@ -47,9 +59,10 @@ describe('ProductionSystem', () => {
             farmer.inventory[ResourceType.GRAIN] = 0;
             farmer.intelligence = 100;
             farmer.landTokens = 1;
+            mockContext.residentsByJob['FARMER'] = [farmer];
         }
 
-        ProductionSystem.process(mockState, flowStats, () => 1.0);
+        ProductionSystem.process(mockState, mockContext, flowStats, () => 1.0);
 
         if (farmer) {
             expect(farmer.inventory[ResourceType.GRAIN]).toBeGreaterThan(0);
@@ -69,9 +82,10 @@ describe('ProductionSystem', () => {
             mockState.population.residents.forEach(r => {
                 if (r.job === 'WORKER') r.employerId = factory.id;
             });
+            mockContext.employeesByCompany[factory.id] = mockState.population.residents.filter(r => r.employerId === factory.id);
         }
 
-        ProductionSystem.process(mockState, flowStats, () => 1.0);
+        ProductionSystem.process(mockState, mockContext, flowStats, () => 1.0);
 
         if (factory) {
             expect(factory.inventory.finished[ProductType.BREAD]).toBeGreaterThan(0);
