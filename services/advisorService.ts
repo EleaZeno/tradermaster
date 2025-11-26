@@ -1,10 +1,5 @@
-
 import { GoogleGenAI } from "@google/genai";
-import { GameState, GodModeData, ResourceType, ProductType } from "../types";
-
-// ==========================================
-// 真正的 Gemini AI 核心
-// ==========================================
+import { GameState, GodModeData, ResourceType, ProductType } from "../shared/types";
 
 const NEWS_EVENTS = [
     { headline: "遭遇旱灾", description: "由于持续的高温干旱，全谷的粮食产量预计将下降 30%。", impactType: "BAD", target: ResourceType.GRAIN, modifier: -0.3 },
@@ -14,9 +9,6 @@ const NEWS_EVENTS = [
     { headline: "工会运动", description: "工人阶级联合起来要求更高的待遇，所有企业的工资压力上升。", impactType: "NEUTRAL", target: "WAGE", modifier: 0.15 },
 ];
 
-/**
- * 提取精简的经济摘要以节省 Token
- */
 const getEconomicSummary = (gameState: GameState, godModeData: GodModeData) => {
     return {
         day: gameState.day,
@@ -47,9 +39,6 @@ const getEconomicSummary = (gameState: GameState, godModeData: GodModeData) => {
     };
 };
 
-/**
- * 调用 Gemini API 分析经济
- */
 export const getFinancialAdvisorResponse = async (
   userMessage: string, 
   gameState: GameState,
@@ -87,11 +76,7 @@ export const getFinancialAdvisorResponse = async (
   }
 };
 
-/**
- * 生成随机市场事件 (保留本地逻辑，因不需要复杂推理)
- */
 export const generateMarketEvent = async (currentDay: number): Promise<{headline: string, description: string, impactType: 'GOOD'|'BAD'|'NEUTRAL', turnCreated: number, effect?: any} | null> => {
-    // 每天 10% 概率发生事件，避免太频繁
     if (Math.random() > 0.1) return null;
 
     const eventTemplate = NEWS_EVENTS[Math.floor(Math.random() * NEWS_EVENTS.length)];
@@ -101,6 +86,6 @@ export const generateMarketEvent = async (currentDay: number): Promise<{headline
         description: eventTemplate.description,
         impactType: eventTemplate.impactType as any,
         turnCreated: currentDay,
-        effect: { target: eventTemplate.target, modifier: eventTemplate.modifier } // 传递给 Logic 处理
+        effect: { target: eventTemplate.target, modifier: eventTemplate.modifier }
     };
 };

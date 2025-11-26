@@ -1,57 +1,71 @@
+import { Resident, Company, CityTreasury } from '../../shared/types';
 
-import { Resident, Company, CityTreasury } from '../../types';
+export interface TransferContext {
+  treasury: CityTreasury;
+  residents: Resident[];
+}
 
 export class Transaction {
   /**
-   * 安全转账：从 Source 转移到 Target
-   * @returns boolean 成功或失败
+   * Executes a safe money transfer between entities.
+   * Handles validation of funds and updates balances.
+   * 
+   * @param from - The entity sending money ('TREASURY', 'MARKET', or Object with cash)
+   * @param to - The entity receiving money ('TREASURY', 'MARKET', 'GATHERERS', or Object with cash)
+   * @param amount - The amount to transfer
+   * @param context - Context containing treasury and residents list for special transfers
+   * @returns boolean - True if transfer succeeded, False if insufficient funds or invalid amount
    */
   static transfer(
     from: Resident | Company | CityTreasury | 'TREASURY' | 'MARKET',
     to: Resident | Company | CityTreasury | 'TREASURY' | 'MARKET' | 'GATHERERS',
     amount: number,
-    context: { treasury: CityTreasury, residents: Resident[] }
+    context: TransferContext
   ): boolean {
     if (amount <= 0.001) return false;
 
-    // 1. 检查付款方余额
     let payerCash = 0;
-    if (from === 'TREASURY') payerCash = context.treasury.cash;
-    else if (from === 'MARKET') payerCash = Number.MAX_SAFE_INTEGER; // 市场（上帝）有无限资金
-    else payerCash = from.cash;
+    
+    // Determine payer's available cash
+    if (from === 'TREASURY') {
+      payerCash = context.treasury.cash;
+    } else if (from === 'MARKET') {
+      payerCash = Number.MAX_SAFE_INTEGER; 
+    } else {
+      payerCash = from.cash;
+    }
 
+    // Validation: Insufficient funds
     if (payerCash < amount) return false;
 
-    // 2. 扣款
+    // Execute Deduction
     if (from === 'TREASURY') {
       context.treasury.cash -= amount;
-      // 注意：expense 统计通常在调用处处理，因为这里不知道这笔钱是干嘛的（工资？福利？）
+    } else if (from !== 'MARKET') {
+      from.cash -= amount;
     }
-    else if (from !== 'MARKET') from.cash -= amount;
 
-    // 3. 收款
+    // Execute Addition
     if (to === 'TREASURY') {
       context.treasury.cash += amount;
-      // income 统计通常也在调用处处理，但如果这是纯税务转账，可以加
     } else if (to === 'GATHERERS') {
-      // === 核心修复：农民卖粮税收拦截 ===
-      // 农民是最大的群体，如果他们卖粮不交税，国库就收不到钱
+      // Special Logic: Gatherers pay income tax automatically on receiving funds
       const taxRate = context.treasury.taxPolicy.incomeTaxRate;
       const tax = amount * taxRate;
       const netIncome = amount - tax;
 
-      // 3.1 税款进国库
       context.treasury.cash += tax;
       context.treasury.dailyIncome += tax;
 
-      // 3.2 净收入分给农民
-      const farmers = context.residents.filter(r => r.job === 'FARMER');
+      const farmers = context.residents.filter(resident => resident.job === 'FARMER');
       if (farmers.length > 0) {
         const share = netIncome / farmers.length;
-        farmers.forEach(f => f.cash += share);
+        farmers.forEach(farmer => {
+          farmer.cash += share;
+        });
       }
     } else if (to !== 'MARKET') {
-      // @ts-ignore
+      // @ts-ignore - 'to' is Resident | Company | CityTreasury which have 'cash'
       to.cash += amount;
     }
 

@@ -1,4 +1,3 @@
-
 import { ReactNode } from 'react';
 
 export enum ResourceType {
@@ -94,7 +93,7 @@ export interface Resident {
   futuresPositions: FuturesPosition[]; 
   politicalStance: 'CAPITALIST' | 'SOCIALIST' | 'CENTRIST';
   influence: number; 
-  landTokens?: number; // Added Land Scarcity Token
+  landTokens?: number;
 }
 
 export interface PopulationState {
@@ -171,7 +170,7 @@ export interface Company {
     raw: Partial<Record<ResourceType, number>>;
     finished: Partial<Record<IndustryType, number>>;
   };
-  landTokens?: number; // Companies can also own land
+  landTokens?: number;
   avgCost: number;
   accumulatedRevenue: number;
   accumulatedCosts: number;
@@ -221,7 +220,7 @@ export interface CityTreasury {
   totalGrainDistributed: number;
   fiscalStatus: 'AUSTERITY' | 'NEUTRAL' | 'STIMULUS';
   fiscalCorrection: string; 
-  landTokens?: number; // Government land
+  landTokens?: number;
 }
 
 export interface Election {

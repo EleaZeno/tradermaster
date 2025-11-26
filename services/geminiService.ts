@@ -1,9 +1,4 @@
-
-import { GameState, GodModeData, ResourceType, ProductType } from "../types";
-
-// ==========================================
-// 本地 AI 核心：不再依赖外部 API，而是基于数据的规则引擎
-// ==========================================
+import { GameState, GodModeData, ResourceType, ProductType } from "../shared/types";
 
 const ADVICE_TEMPLATES = {
   CRISIS_FAMINE: [
@@ -36,21 +31,16 @@ const NEWS_EVENTS = [
     { headline: "工会运动", description: "工人阶级联合起来要求更高的待遇，所有企业的工资压力上升。", impactType: "NEUTRAL", target: "WAGE", modifier: 0.15 },
 ];
 
-/**
- * 本地规则引擎：分析经济数据并返回建议
- */
 export const getFinancialAdvisorResponse = async (
   userMessage: string, 
   gameState: GameState,
   godModeData: GodModeData,
   chatHistory: {role: string, text: string}[]
 ): Promise<string> => {
-  // 模拟 AI 思考延迟 (500ms)，增加沉浸感
   await new Promise(resolve => setTimeout(resolve, 500));
 
   const msg = userMessage.toLowerCase();
   
-  // 1. 紧急危机检查
   const grainStock = gameState.resources[ResourceType.GRAIN].marketInventory;
   if (grainStock < 20) return pickTemplate(ADVICE_TEMPLATES.CRISIS_FAMINE, {});
 
@@ -58,7 +48,6 @@ export const getFinancialAdvisorResponse = async (
       return pickTemplate(ADVICE_TEMPLATES.CRISIS_POVERTY, { gini: godModeData.affordabilityIndex.toFixed(2) });
   }
 
-  // 2. 针对玩家公司的建议
   const playerCompany = gameState.companies.find(c => c.isPlayerFounded);
   if (playerCompany) {
       if (playerCompany.cash < 50) {
@@ -70,7 +59,6 @@ export const getFinancialAdvisorResponse = async (
       }
   }
 
-  // 3. 回答特定问题 (关键字匹配)
   if (msg.includes("赚") || msg.includes("利润") || msg.includes("投资")) {
       return `当前最赚钱的行业是【${godModeData.mostProfitableIndustry}】。请关注其 P/E 值和供需缺口。`;
   }
@@ -85,7 +73,6 @@ export const getFinancialAdvisorResponse = async (
      return `目前市场缺口：粮食缺 ${grainGap > 0 ? grainGap.toFixed(0) : 0}，面包缺 ${breadGap > 0 ? breadGap.toFixed(0) : 0}。`;
   }
 
-  // 4. 默认回复：基于供需缺口
   const grainGap = godModeData.supplyDemandGap[ResourceType.GRAIN];
   if (grainGap > 10) {
       return pickTemplate(ADVICE_TEMPLATES.OPPORTUNITY_ARBITRAGE, { product: "粮食", margin: "30", gap: grainGap.toFixed(0) });
@@ -102,11 +89,7 @@ const pickTemplate = (templates: string[], data: Record<string, string>) => {
     return text;
 };
 
-/**
- * 生成随机市场事件
- */
 export const generateMarketEvent = async (currentDay: number): Promise<{headline: string, description: string, impactType: 'GOOD'|'BAD'|'NEUTRAL', turnCreated: number, effect?: any} | null> => {
-    // 每天 10% 概率发生事件，避免太频繁
     if (Math.random() > 0.1) return null;
 
     const eventTemplate = NEWS_EVENTS[Math.floor(Math.random() * NEWS_EVENTS.length)];
@@ -116,6 +99,6 @@ export const generateMarketEvent = async (currentDay: number): Promise<{headline
         description: eventTemplate.description,
         impactType: eventTemplate.impactType as any,
         turnCreated: currentDay,
-        effect: { target: eventTemplate.target, modifier: eventTemplate.modifier } // 传递给 Logic 处理
+        effect: { target: eventTemplate.target, modifier: eventTemplate.modifier } 
     };
 };

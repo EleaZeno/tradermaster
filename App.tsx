@@ -1,29 +1,26 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
-  TrendingUp, Wallet, Calendar, Play, Pause, FastForward,
-  ShoppingBag, Building2, BarChart3, Plus, Settings, Coffee, Landmark, Wheat, AlertTriangle
+  Wheat, Building2, BarChart3, Landmark, Plus, Settings, AlertTriangle 
 } from 'lucide-react';
-import { useGameStore } from './store/useGameStore';
-import { useGameLoop } from './hooks/useGameLoop';
-import { IndustryStat, LivingStandard, IndustryType, ResourceType } from './types';
-import { Button } from './components/Button';
-import { Card } from './components/Card';
-import { CommoditiesTab } from './components/tabs/CommoditiesTab';
-import { CompaniesTab } from './components/tabs/CompaniesTab';
-import { StatsTab } from './components/tabs/StatsTab';
-import { CityHallTab } from './components/tabs/CityHallTab';
+import { useGameStore } from './shared/store/useGameStore';
+import { useGameLoop } from './shared/hooks/useGameLoop';
+import { IndustryStat, IndustryType } from './shared/types';
+import { Button, Card } from './shared/components';
+import { Header } from './components/Header';
+import { CommoditiesTab } from './features/commodities/CommoditiesTab';
+import { CompaniesTab } from './features/companies/CompaniesTab';
+import { StatsTab } from './features/stats/StatsTab';
+import { CityHallTab } from './features/cityhall/CityHallTab';
 import { ChatWidget } from './components/ChatWidget';
-import { CompanyModal } from './components/modals/CompanyModal';
-import { CreateCompanyModal } from './components/modals/CreateCompanyModal';
+import { CompanyModal } from './features/companies/CompanyModal';
+import { CreateCompanyModal } from './features/companies/CreateCompanyModal';
 import { generateMarketEvent } from './services/advisorService';
-import { useGodModeData } from './hooks/useGodModeData';
+import { useGodModeData } from './shared/hooks/useGodModeData';
 
 const App: React.FC = () => {
-  // Init Game Loop
   useGameLoop();
 
-  // Use Zustand Store
+  // Store Selectors
   const gameState = useGameStore(s => s.gameState);
   const isRunning = useGameStore(s => s.isRunning);
   const gameSpeed = useGameStore(s => s.gameSpeed);
@@ -34,7 +31,6 @@ const App: React.FC = () => {
   const addLog = useGameStore(s => s.addLog);
   const addEvent = useGameStore(s => s.addEvent); 
   
-  // Actions
   const createCompany = useGameStore(s => s.createCompany);
   const updateCompany = useGameStore(s => s.updateCompany);
   const payDividend = useGameStore(s => s.payDividend);
@@ -49,32 +45,26 @@ const App: React.FC = () => {
   const [showCreateCompany, setShowCreateCompany] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
-  // --- Real Economic Calculation (Refactored to Hook) ---
   const godModeData = useGodModeData(gameState);
 
-  // --- Event Generation Logic ---
   useEffect(() => {
-      if (isRunning && gameState.day % 1 === 0) { // Every tick check
+      if (isRunning && gameState.day % 1 === 0) { 
          const tryGenerateEvent = async () => {
-             // 限制事件频率，防止刷屏
              if (gameState.events.length > 0 && gameState.day - gameState.events[0].turnCreated < 5) return;
              
              const evt = await generateMarketEvent(gameState.day);
              if (evt) {
                  addEvent(evt);
                  addLog(`📢 突发新闻: ${evt.headline}`);
-                 // 移除之前的 stop() 调用，让游戏继续运行
              }
          };
          tryGenerateEvent();
       }
   }, [gameState.day, isRunning]);
 
-  const industryStats: IndustryStat[] = []; // Placeholder for future use
+  const industryStats: IndustryStat[] = []; 
 
-  // --- Derived Data ---
   const selectedCompany = gameState.companies.find(c => c.id === selectedCompanyId);
-  const player = gameState.population.residents.find(r => r.isPlayer);
   const latestEvent = gameState.events.length > 0 ? gameState.events[0] : null;
 
   const handleCreateCompany = (name: string, type: IndustryType) => {
@@ -89,70 +79,14 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-stone-950 text-stone-200 font-sans pb-20">
-      <header className="fixed top-0 inset-x-0 h-16 bg-stone-900/90 backdrop-blur border-b border-stone-800 z-40 px-4 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-2">
-           <div className="bg-gradient-to-br from-amber-500 to-yellow-600 p-1.5 rounded-lg text-white shadow-lg shadow-amber-900/20">
-              <TrendingUp size={20} />
-           </div>
-           <div>
-             <h1 className="text-lg font-bold text-stone-100">伊甸谷 <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">CHAOS MODE</span></h1>
-           </div>
-        </div>
-
-        <div className="flex items-center gap-4 text-sm font-mono">
-           {player && (
-               <div className="flex items-center gap-2 bg-stone-800 rounded p-1 hidden sm:flex">
-                   <Coffee size={14} className="ml-2 text-stone-400"/>
-                   <select 
-                        className="bg-stone-800 text-xs text-stone-300 focus:outline-none"
-                        value={player.livingStandard}
-                        onChange={(e) => setLivingStandard(e.target.value as LivingStandard)}
-                   >
-                       <option value="SURVIVAL">生存模式</option>
-                       <option value="BASIC">温饱</option>
-                       <option value="COMFORT">小康</option>
-                       <option value="LUXURY">奢靡</option>
-                   </select>
-               </div>
-           )}
-
-           <div className="hidden sm:flex items-center gap-2 text-amber-400 bg-amber-950/30 px-3 py-1.5 rounded border border-amber-900/50 shadow-inner">
-              <Wallet size={14} />
-              {gameState.cash.toFixed(2)} oz
-           </div>
-           <div className="flex items-center gap-2 text-stone-400 bg-stone-800/50 px-3 py-1.5 rounded">
-              <Calendar size={14} />
-              Day {gameState.day}
-           </div>
-           
-           {/* Time Controls */}
-           <div className="flex items-center bg-stone-800 rounded-lg p-1 gap-1 border border-stone-700">
-             <button 
-                className={`p-1.5 rounded transition-colors ${!isRunning ? 'bg-red-900/50 text-red-200' : 'text-stone-400 hover:bg-stone-700 hover:text-stone-200'}`} 
-                onClick={() => stop()}
-                title="暂停"
-             >
-                <Pause size={14} fill={!isRunning ? "currentColor" : "none"}/>
-             </button>
-             
-             <div className="w-px h-4 bg-stone-700 mx-1"></div>
-
-             {[1, 2, 5].map(speed => (
-                <button
-                    key={speed}
-                    onClick={() => handleSpeedChange(speed)}
-                    className={`px-2 py-0.5 text-xs font-mono font-bold rounded transition-all duration-200 ${
-                        isRunning && gameSpeed === speed 
-                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50 scale-105' 
-                        : 'text-stone-500 hover:bg-stone-700 hover:text-stone-300'
-                    }`}
-                >
-                    {speed}x
-                </button>
-             ))}
-           </div>
-        </div>
-      </header>
+      <Header 
+        gameState={gameState} 
+        isRunning={isRunning} 
+        gameSpeed={gameSpeed} 
+        onStop={stop} 
+        onSetGameSpeed={handleSpeedChange} 
+        onSetLivingStandard={setLivingStandard}
+      />
 
       <main className="pt-24 pb-10 px-4 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
          <div className="lg:col-span-3 space-y-4 h-fit sticky top-24">
@@ -224,7 +158,7 @@ const App: React.FC = () => {
                         <span className="text-stone-500 block mb-1">供需缺口 (Demand Gap)</span>
                          {Object.entries(godModeData.supplyDemandGap).map(([k, v]) => (
                              <div key={k} className="flex justify-between pl-2">
-                                 <span>{k === ResourceType.GRAIN ? '粮食' : '面包'}</span>
+                                 <span>{k}</span>
                                  <span className={v > 0 ? 'text-red-400' : 'text-emerald-400'}>{v > 0 ? `缺 ${v.toFixed(1)}` : '过剩'}</span>
                              </div>
                          ))}

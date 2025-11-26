@@ -1,7 +1,6 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Bot, Send, X } from 'lucide-react';
-import { GameState, GodModeData, ChatMessage } from '../types';
+import { GameState, GodModeData, ChatMessage } from '../shared/types';
 import { getFinancialAdvisorResponse } from '../services/advisorService';
 
 // @ts-ignore

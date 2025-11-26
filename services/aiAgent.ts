@@ -1,7 +1,5 @@
+import { GameState, GodModeData } from "../shared/types";
 
-import { GameState, GodModeData, ChatMessage } from "../types";
-
-// Prompts could be moved to a separate file, but kept here for simplicity
 const ADVISOR_PROMPTS = {
   SYSTEM: `You are Alpha, a high-level economic advisor AI in a simulated economy called Eden Valley.
   Your goal is to explain complex economic phenomena (supply/demand, inflation, stock valuation) in simple terms.
@@ -26,7 +24,6 @@ export const getFinancialAdvisorResponse = async (
 ) => {
   const msg = userMessage.toLowerCase();
   
-  // Rule-based fallback (Mocking LLM behavior for speed/cost in this demo)
   if (msg.includes("亏损") || msg.includes("赔钱")) {
     return "如果公司亏损，请检查'进销存'面板。通常是因为原材料太贵，或者生产出来的商品卖不出去（库存积压）。您可以尝试裁员或降薪来度过难关。";
   }

@@ -1,38 +1,51 @@
-
-import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType } from '../../types';
+import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType } from '../../shared/types';
 import { Transaction } from '../utils/Transaction';
 
 export class FinancialSystem {
-  static processStockMarket(state: GameState) {
-    state.companies.forEach(c => {
-        const dailyProfit = c.lastProfit;
-        const eps = dailyProfit / c.totalShares;
-        
-        const inventoryVal = Object.values(c.inventory.finished).reduce((s, v) => s + v * (c.avgCost || 1), 0);
-        const bookValue = (c.cash + inventoryVal) / c.totalShares;
-        
-        const peRatio = c.employees > 2 ? 15 : 8;
-        const projectedEPS = eps * 30; 
-        
-        let targetPrice = bookValue + (projectedEPS > 0 ? projectedEPS * peRatio : projectedEPS * 2);
-        targetPrice = Math.max(0.01, targetPrice);
-        
-        const noise = (Math.random() - 0.5) * 0.15;
-        targetPrice = targetPrice * (1 + noise);
-        
-        const open = c.sharePrice;
-        const close = Number((c.sharePrice * 0.9 + targetPrice * 0.1).toFixed(2));
-        c.sharePrice = close;
-        
-        // Generate Candle
-        const volatility = Math.abs(open - close) + (open * 0.03);
-        const high = Math.max(open, close) + Math.random() * volatility;
-        const low = Math.min(open, close) - Math.random() * volatility;
-        const volume = Math.floor(Math.random() * 500) + c.monthlySalesVolume;
+  static updateStockPrices(state: GameState) {
+      state.companies.forEach(comp => {
+        if (comp.isBankrupt) {
+          comp.sharePrice = Math.max(0.01, comp.sharePrice * 0.95);
+          return;
+        }
 
-        c.history.push({ day: state.day + 1, open, high, low, close, volume });
-        if (c.history.length > 60) c.history.shift();
-    });
+        const eps = comp.lastProfit / comp.totalShares;
+        
+        const currentPE = eps > 0 ? comp.sharePrice / eps : 999;
+        
+        let targetPrice = 0;
+        
+        const bookValue = comp.cash / comp.totalShares; 
+        
+        if (eps > 0) {
+            targetPrice = eps * 15;
+            if (comp.dividendRate > 0.05) targetPrice *= 1.2;
+        } else {
+            targetPrice = bookValue * 0.8; 
+        }
+
+        const smoothedPrice = (comp.sharePrice * 0.9) + (targetPrice * 0.1);
+        
+        const noise = 1 + (Math.random() - 0.5) * 0.05;
+        
+        let finalPrice = smoothedPrice * noise;
+        
+        finalPrice = Math.max(0.1, finalPrice);
+        
+        const open = comp.sharePrice;
+        const close = parseFloat(finalPrice.toFixed(2));
+        const high = Math.max(open, close) * (1 + Math.random() * 0.02);
+        const low = Math.min(open, close) * (1 - Math.random() * 0.02);
+        const volume = Math.floor(comp.monthlySalesVolume * (1 + Math.random()));
+
+        comp.sharePrice = close;
+        comp.history.push({ day: state.day, open, high, low, close, volume });
+        if (comp.history.length > 60) comp.history.shift();
+      });
+  }
+
+  static processStockMarket(state: GameState) {
+      this.updateStockPrices(state);
   }
 
   static runAudit(state: GameState, flowStats: any) {

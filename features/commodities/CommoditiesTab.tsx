@@ -1,11 +1,9 @@
-
 import React, { useState } from 'react';
-import { ResourceType, ResourceItem, ProductType, ProductItem, FuturesContract, IndustryType } from '../../types';
+import { ResourceType, ResourceItem, ProductType, ProductItem, FuturesContract, IndustryType } from '../../shared/types';
 import { RESOURCE_ICONS } from '../../constants';
-import { Card } from '../Card';
-import { Button } from '../Button';
+import { Card } from '../../shared/components';
 import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
-import { CommodityModal } from '../modals/CommodityModal';
+import { CommodityModal } from './CommodityModal';
 
 interface CommoditiesTabProps {
   resources: Record<ResourceType, ResourceItem>;
@@ -46,7 +44,7 @@ export const CommoditiesTab: React.FC<CommoditiesTabProps> = ({ resources, produ
       if (history.length < 2) return '#9ca3af';
       const start = history[0].close;
       const end = history[history.length - 1].close;
-      return end >= start ? '#10b981' : '#f59e0b'; // Emerald or Amber
+      return end >= start ? '#10b981' : '#f59e0b';
   };
 
   const allItems = [...Object.values(resources), ...Object.values(products)] as (ResourceItem | ProductItem)[];
@@ -87,7 +85,6 @@ export const CommoditiesTab: React.FC<CommoditiesTabProps> = ({ resources, produ
                     </div>
                 </div>
 
-                {/* Professional Mini Chart Area */}
                 <div className="h-24 -mx-5 -mb-2 relative z-0 opacity-80 group-hover:opacity-100 transition-opacity">
                     {renderMiniChart(item.history, color, item.id)}
                 </div>
@@ -108,7 +105,6 @@ export const CommoditiesTab: React.FC<CommoditiesTabProps> = ({ resources, produ
             onClose={() => setSelectedItem(null)} 
             onTrade={(type, id) => {
                 onTrade(type, id);
-                // Don't close modal to allow rapid trading
             }}
           />
       )}

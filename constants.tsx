@@ -1,19 +1,16 @@
-
 import React from 'react';
-import { ResourceType, ProductType, ResourceItem, ProductItem, Company, Fund, PopulationState, Resident, IndustryType, Election, Shareholder, CityTreasury, CompanyType, WageStructure, Candle } from './types';
+import { ResourceType, ProductType, ResourceItem, ProductItem, Company, Fund, PopulationState, Resident, IndustryType, Election, Shareholder, CityTreasury, CompanyType, WageStructure, Candle } from './shared/types';
 import { Wheat, Cookie } from 'lucide-react';
 
-// --- 经济模型常量 (微型社会: 30人, M0=1000) ---
 export const TOTAL_POPULATION_COUNT = 30;
 export const INITIAL_PLAYER_CASH = 100;
+export const TOTAL_LAND_TOKENS = 80;
 
-// 图标
 export const RESOURCE_ICONS: Record<ResourceType | ProductType, React.ReactNode> = {
   [ResourceType.GRAIN]: <Wheat className="w-4 h-4 text-amber-300" />,
   [ProductType.BREAD]: <Cookie className="w-4 h-4 text-orange-400" />,
 };
 
-// --- 初始化 30 个居民 (特权阶层 vs 劳动阶层) ---
 const generateResidents = (count: number): Resident[] => {
   const residents: Resident[] = [];
   const names = [
@@ -23,84 +20,89 @@ const generateResidents = (count: number): Resident[] => {
     "朱十七", "秦十八", "尤十九", "许二十", "何廿一", "吕廿二", "施廿三", "张廿四", "孔廿五", "曹廿六", "严廿七", "华廿八", "金廿九"
   ];
   
-  // 0. 玩家 (投资者/无业)
   residents.push({
     id: 'res_player', name: names[0], age: 25, isPlayer: true,
     wealth: INITIAL_PLAYER_CASH, cash: INITIAL_PLAYER_CASH,
     job: 'UNEMPLOYED', employerId: undefined, salary: 0,
     influence: 50, intelligence: 90, leadership: 50, politicalStance: 'CENTRIST',
     happiness: 100, inventory: { [ResourceType.GRAIN]: 10 }, portfolio: {}, futuresPositions: [],
-    livingStandard: 'BASIC', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 }
+    livingStandard: 'BASIC', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
+    landTokens: 0 
   });
 
-  // 1. 市长 (公务员)
   residents.push({
     id: 'res_mayor', name: names[1], age: 55, isPlayer: false,
     wealth: 60, cash: 100, 
     job: 'MAYOR', salary: 2.0, 
     influence: 100, intelligence: 80, leadership: 90, politicalStance: 'CENTRIST',
     happiness: 100, inventory: { [ProductType.BREAD]: 5 }, portfolio: {}, futuresPositions: [],
-    livingStandard: 'LUXURY', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 }
+    livingStandard: 'LUXURY', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 },
+    landTokens: 5 
   });
 
-  // 2. 副市长 (公务员)
   residents.push({
     id: 'res_deputy', name: names[2], age: 40, isPlayer: false,
     wealth: 45, cash: 80,
     job: 'DEPUTY_MAYOR', salary: 1.2, 
     influence: 70, intelligence: 75, leadership: 60, politicalStance: 'CENTRIST',
     happiness: 90, inventory: { [ProductType.BREAD]: 3 }, portfolio: {}, futuresPositions: [],
-    livingStandard: 'COMFORT', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 }
+    livingStandard: 'COMFORT', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 },
+    landTokens: 2
   });
 
-  // 3. CEO 1 (农业)
   residents.push({
     id: 'res_ceo_grain', name: names[3], age: 50, isPlayer: false,
     wealth: 50, cash: 80,
     job: 'EXECUTIVE', employerId: 'comp_grain', salary: 2.5,
     influence: 80, intelligence: 85, leadership: 80, politicalStance: 'CAPITALIST',
     happiness: 90, inventory: {}, portfolio: {}, futuresPositions: [],
-    livingStandard: 'COMFORT', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 }
+    livingStandard: 'COMFORT', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
+    landTokens: 0 
   });
 
-  // 4. 工会主席 1 (农业)
   residents.push({
     id: 'res_union_grain', name: names[4], age: 45, isPlayer: false,
     wealth: 30, cash: 60,
     job: 'WORKER', employerId: 'comp_grain', salary: 0, 
     influence: 90, intelligence: 60, leadership: 90, politicalStance: 'SOCIALIST',
     happiness: 95, inventory: {}, portfolio: {}, futuresPositions: [],
-    livingStandard: 'BASIC', timePreference: 0.4, needs: { [ResourceType.GRAIN]: 100 }
+    livingStandard: 'BASIC', timePreference: 0.4, needs: { [ResourceType.GRAIN]: 100 },
+    landTokens: 1 
   });
 
-  // 5. CEO 2 (食品)
   residents.push({
     id: 'res_ceo_food', name: names[5], age: 48, isPlayer: false,
     wealth: 50, cash: 80,
     job: 'EXECUTIVE', employerId: 'comp_food', salary: 2.5,
     influence: 80, intelligence: 85, leadership: 80, politicalStance: 'CAPITALIST',
     happiness: 90, inventory: {}, portfolio: {}, futuresPositions: [],
-    livingStandard: 'COMFORT', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 }
+    livingStandard: 'COMFORT', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
+    landTokens: 0
   });
 
-  // 6. 工会主席 2 (食品)
   residents.push({
     id: 'res_union_food', name: names[6], age: 42, isPlayer: false,
     wealth: 30, cash: 60,
     job: 'WORKER', employerId: 'comp_food', salary: 0,
     influence: 90, intelligence: 60, leadership: 90, politicalStance: 'SOCIALIST',
     happiness: 95, inventory: {}, portfolio: {}, futuresPositions: [],
-    livingStandard: 'BASIC', timePreference: 0.4, needs: { [ResourceType.GRAIN]: 100 }
+    livingStandard: 'BASIC', timePreference: 0.4, needs: { [ResourceType.GRAIN]: 100 },
+    landTokens: 0
   });
 
-  // 7-29. 农民/工人
+  let farmersCount = 0;
   for (let i = 7; i < count; i++) {
     const intelligence = 60 + Math.floor(Math.random() * 40); 
     let job: Resident['job'] = 'FARMER';
     let employerId: string | undefined = undefined;
+    let land = 0;
 
     if (i === 7 || i === 8) { job = 'WORKER'; employerId = 'comp_grain'; }
     else if (i === 9 || i === 10) { job = 'WORKER'; employerId = 'comp_food'; }
+    else { 
+        farmersCount++;
+        land = 2 + Math.floor(Math.random() * 3); 
+    }
 
     residents.push({
       id: `res_${i}`,
@@ -115,7 +117,8 @@ const generateResidents = (count: number): Resident[] => {
       happiness: 70, inventory: { [ResourceType.GRAIN]: 5 }, portfolio: {}, futuresPositions: [],
       livingStandard: 'SURVIVAL',
       timePreference: 0.5,
-      needs: { [ResourceType.GRAIN]: 100 }
+      needs: { [ResourceType.GRAIN]: 100 },
+      landTokens: land
     });
   }
 
@@ -124,7 +127,6 @@ const generateResidents = (count: number): Resident[] => {
 
 const initialResidents = generateResidents(TOTAL_POPULATION_COUNT);
 
-// 辅助函数：随机分配股份
 const distributeInitialShares = (residents: Resident[]): Shareholder[] => {
     let remainingShares = 1000;
     const shareholders: Shareholder[] = [];
@@ -195,7 +197,8 @@ export const INITIAL_CITY_TREASURY: CityTreasury = {
     grainDistributedToday: 0,
     totalGrainDistributed: 0,
     fiscalStatus: 'NEUTRAL',
-    fiscalCorrection: "政策稳定"
+    fiscalCorrection: "政策稳定",
+    landTokens: 10 
 };
 
 export const INITIAL_ELECTION: Election = {
@@ -234,7 +237,6 @@ export const INITIAL_PRODUCTS: Record<ProductType, ProductItem> = {
   },
 };
 
-// --- 公司结构 ---
 export const INITIAL_COMPANIES: Company[] = [
   {
     id: 'comp_grain', name: '红星农业公社',
@@ -254,6 +256,7 @@ export const INITIAL_COMPANIES: Company[] = [
     executiveSalary: 3.0, dividendRate: 0.1, margin: 0.2, aiPersonality: 'BALANCED',
     boardMembers: ['inst_gov'], unionTension: 0, strikeDays: 0,
     inventory: { raw: {}, finished: { [ResourceType.GRAIN]: 80 } }, 
+    landTokens: 10, 
     avgCost: 0.5,
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.05, 20),
@@ -277,6 +280,7 @@ export const INITIAL_COMPANIES: Company[] = [
     executiveSalary: 3.0, dividendRate: 0.1, margin: 0.2, aiPersonality: 'AGGRESSIVE',
     boardMembers: ['inst_gov'], unionTension: 0, strikeDays: 0,
     inventory: { raw: { [ResourceType.GRAIN]: 100 }, finished: { [ProductType.BREAD]: 20 } }, 
+    landTokens: 0, 
     avgCost: 1.2,
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.1, 20),
