@@ -1,37 +1,37 @@
-import { GameState, Company, Resident } from '../../shared/types';
+
+import { GameState, Company, Resident, GameContext } from '../../shared/types';
 import { Transaction } from '../utils/Transaction';
 
 export class LaborSystem {
-  /**
-   * Processes all labor related activities: hiring, firing, wages, and social mobility.
-   */
-  static process(gameState: GameState, livingCostBenchmark: number, wagePressureMod: number) {
+  static process(gameState: GameState, context: GameContext, livingCostBenchmark: number, wagePressureMod: number): void {
     const { companies } = gameState;
     const residents = gameState.population.residents;
 
     LaborSystem.processSocialMobility(gameState);
 
+    const employeesByCompany = context.employeesByCompany;
+
     companies.forEach(company => {
       if (company.isBankrupt) return;
+      
+      const companyEmployees = employeesByCompany[company.id] || [];
 
-      LaborSystem.processUnionPolitics(company, residents, gameState);
+      LaborSystem.processUnionPolitics(company, companyEmployees, gameState);
       LaborSystem.updateWageOffer(company, livingCostBenchmark);
 
       if (!company.isPlayerFounded) {
-        LaborSystem.adjustAIStrategy(company, residents, wagePressureMod);
+        LaborSystem.adjustAIStrategy(company, companyEmployees, wagePressureMod);
       }
 
-      LaborSystem.payExecutives(company, residents, gameState);
-      LaborSystem.manageHeadcount(company, residents, gameState);
+      LaborSystem.payExecutives(company, companyEmployees, gameState, context);
+      LaborSystem.manageHeadcount(company, companyEmployees, residents, gameState, context);
     });
   }
 
-  private static processUnionPolitics(company: Company, residents: Resident[], gameState: GameState) {
-      const workers = residents.filter(r => r.employerId === company.id && r.job === 'WORKER');
+  private static processUnionPolitics(company: Company, employees: Resident[], gameState: GameState): void {
+      const workers = employees.filter(r => r.job === 'WORKER');
+      const currentLeader = employees.find(r => r.job === 'UNION_LEADER');
       
-      let currentLeader = residents.find(r => r.employerId === company.id && r.job === 'UNION_LEADER');
-      
-      // Election logic: every 7 days or if no leader exists
       if ((!currentLeader && workers.length > 2) || (gameState.day % 7 === 0 && workers.length > 2)) {
           const candidates = [...workers].sort((a, b) => {
               const scoreA = a.leadership + (100 - a.happiness);
@@ -61,12 +61,12 @@ export class LaborSystem {
       }
   }
 
-  private static processSocialMobility(gameState: GameState) {
+  private static processSocialMobility(gameState: GameState): void {
     const WEALTH_THRESHOLD = 350; 
     const POVERTY_LINE = 20; 
 
     gameState.population.residents.forEach(resident => {
-        if (resident.isPlayer || ['MAYOR', 'DEPUTY_MAYOR', 'EXECUTIVE', 'UNION_LEADER'].includes(resident.job)) return;
+        if (resident.isPlayer || resident.job === 'MAYOR' || resident.job === 'DEPUTY_MAYOR' || resident.job === 'EXECUTIVE' || resident.job === 'UNION_LEADER') return;
 
         // Upward Mobility
         if (resident.cash > WEALTH_THRESHOLD && (resident.job === 'FARMER' || resident.job === 'WORKER')) {
@@ -93,7 +93,7 @@ export class LaborSystem {
     gameState.population.farmers = gameState.population.residents.filter(r => r.job === 'FARMER').length;
   }
 
-  private static updateWageOffer(company: Company, benchmark: number) {
+  private static updateWageOffer(company: Company, benchmark: number): void {
     let targetMultiplier = company.wageMultiplier || 1.5;
     
     if (company.unionTension > 50) {
@@ -111,15 +111,12 @@ export class LaborSystem {
     company.wageOffer = offer;
   }
 
-  private static adjustAIStrategy(company: Company, residents: Resident[], wagePressure: number) {
-    const employees = residents.filter(r => r.employerId === company.id);
+  private static adjustAIStrategy(company: Company, employees: Resident[], wagePressure: number): void {
     const workersCount = employees.filter(r => r.job === 'WORKER').length;
     const nonWorkersCount = employees.filter(r => r.job !== 'WORKER').length;
     
-    // Determine Target
     const stock = Object.values(company.inventory.finished).reduce((a, b) => a + (Number(b) || 0), 0);
     
-    // Inventory Management Logic
     if (stock > 50 && company.employees > 1) {
         company.targetEmployees = Math.max(1, company.targetEmployees - 1);
     } else if (stock < 15 && company.cash > 200) {
@@ -129,7 +126,6 @@ export class LaborSystem {
     const target = Math.max(0, company.targetEmployees - nonWorkersCount);
     const gap = target - workersCount;
 
-    // Wage Adjustment Logic
     if (gap > 0 || wagePressure > 1.05 || company.unionTension > 60) {
       company.wageMultiplier = Math.min(5.0, company.wageMultiplier + 0.15);
     } else if (gap < 0 || (gap === 0 && company.cash < company.wageOffer * 5)) {
@@ -139,8 +135,8 @@ export class LaborSystem {
     }
   }
 
-  private static payExecutives(company: Company, residents: Resident[], gameState: GameState) {
-    const executives = residents.filter(r => (r.job === 'EXECUTIVE' || r.job === 'UNION_LEADER') && r.employerId === company.id);
+  private static payExecutives(company: Company, employees: Resident[], gameState: GameState, context: GameContext): void {
+    const executives = employees.filter(r => r.job === 'EXECUTIVE' || r.job === 'UNION_LEADER');
     
     executives.forEach(exec => {
       let salary = 0;
@@ -151,14 +147,13 @@ export class LaborSystem {
       }
 
       if (company.cash >= salary) {
-        Transaction.transfer(company, exec, salary, { treasury: gameState.cityTreasury, residents });
+        Transaction.transfer(company, exec, salary, { treasury: gameState.cityTreasury, residents: gameState.population.residents, context });
         company.accumulatedCosts += salary;
       }
     });
   }
 
-  private static manageHeadcount(company: Company, residents: Resident[], gameState: GameState) {
-    const employees = residents.filter(r => r.employerId === company.id);
+  private static manageHeadcount(company: Company, employees: Resident[], allResidents: Resident[], gameState: GameState, context: GameContext): void {
     const workers = employees.filter(r => r.job === 'WORKER');
     const nonWorkersCount = employees.filter(r => r.job !== 'WORKER').length;
     const target = Math.max(0, company.targetEmployees - nonWorkersCount);
@@ -166,14 +161,22 @@ export class LaborSystem {
 
     // Hiring
     if (gap > 0 && company.cash > company.wageOffer * 3) { 
-      // Find a cheap, unhappy farmer
-      const candidate = residents.find(r => r.job === 'FARMER' && r.happiness < 90);
+      // LABOR SUPPLY LOGIC: Check Reservation Wage
+      const candidate = allResidents.find(r => 
+          r.job === 'FARMER' && 
+          r.reservationWage <= company.wageOffer && 
+          r.happiness < 90
+      );
+      
       if (candidate) {
         candidate.job = 'WORKER';
         candidate.employerId = company.id;
         company.employees++;
-        // Signing bonus
-        Transaction.transfer(company, candidate, company.wageOffer * 0.5, { treasury: gameState.cityTreasury, residents });
+        
+        if (context.employeesByCompany[company.id]) context.employeesByCompany[company.id].push(candidate);
+        
+        // Signing Bonus
+        Transaction.transfer(company, candidate, company.wageOffer * 0.5, { treasury: gameState.cityTreasury, residents: allResidents, context });
       }
     } 
     // Firing
@@ -183,8 +186,11 @@ export class LaborSystem {
         workerToFire.job = 'FARMER';
         workerToFire.employerId = undefined;
         company.employees--;
-        // Severance pay
-        Transaction.transfer(company, workerToFire, company.wageOffer * 2, { treasury: gameState.cityTreasury, residents });
+        
+        const idx = context.employeesByCompany[company.id]?.indexOf(workerToFire);
+        if (idx > -1) context.employeesByCompany[company.id].splice(idx, 1);
+        
+        Transaction.transfer(company, workerToFire, company.wageOffer * 2, { treasury: gameState.cityTreasury, residents: allResidents, context });
       }
     }
   }

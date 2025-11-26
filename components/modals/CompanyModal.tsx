@@ -4,7 +4,7 @@ import { DollarSign, TrendingUp, Users, ShieldAlert, Briefcase, PlusCircle, Acti
 import { Company, ProductType, ProductItem, ResourceType, IndustryType, ResourceItem } from '../../types';
 import { Card } from '../Card';
 import { Button } from '../Button';
-import { RESOURCE_ICONS } from '../../constants';
+import { RESOURCE_ICONS } from '../../shared/assets';
 import { KLineChart } from '../charts/KLineChart';
 
 interface CompanyModalProps {

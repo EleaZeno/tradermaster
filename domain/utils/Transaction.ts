@@ -1,24 +1,19 @@
-import { Resident, Company, CityTreasury } from '../../shared/types';
+import { Resident, CityTreasury, TransactionParty, CashEntity, GameContext } from '../../shared/types';
 
 export interface TransferContext {
   treasury: CityTreasury;
   residents: Resident[];
+  context?: GameContext;
 }
 
 export class Transaction {
   /**
    * Executes a safe money transfer between entities.
    * Handles validation of funds and updates balances.
-   * 
-   * @param from - The entity sending money ('TREASURY', 'MARKET', or Object with cash)
-   * @param to - The entity receiving money ('TREASURY', 'MARKET', 'GATHERERS', or Object with cash)
-   * @param amount - The amount to transfer
-   * @param context - Context containing treasury and residents list for special transfers
-   * @returns boolean - True if transfer succeeded, False if insufficient funds or invalid amount
    */
   static transfer(
-    from: Resident | Company | CityTreasury | 'TREASURY' | 'MARKET',
-    to: Resident | Company | CityTreasury | 'TREASURY' | 'MARKET' | 'GATHERERS',
+    from: TransactionParty,
+    to: TransactionParty,
     amount: number,
     context: TransferContext
   ): boolean {
@@ -31,8 +26,11 @@ export class Transaction {
       payerCash = context.treasury.cash;
     } else if (from === 'MARKET') {
       payerCash = Number.MAX_SAFE_INTEGER; 
+    } else if (from !== 'GATHERERS' && typeof from === 'object' && 'cash' in from) {
+      payerCash = (from as CashEntity).cash;
     } else {
-      payerCash = from.cash;
+       if (from === 'GATHERERS') return false; 
+       return false;
     }
 
     // Validation: Insufficient funds
@@ -41,8 +39,8 @@ export class Transaction {
     // Execute Deduction
     if (from === 'TREASURY') {
       context.treasury.cash -= amount;
-    } else if (from !== 'MARKET') {
-      from.cash -= amount;
+    } else if (typeof from === 'object' && 'cash' in from) {
+      (from as CashEntity).cash -= amount;
     }
 
     // Execute Addition
@@ -57,16 +55,17 @@ export class Transaction {
       context.treasury.cash += tax;
       context.treasury.dailyIncome += tax;
 
-      const farmers = context.residents.filter(resident => resident.job === 'FARMER');
+      // Optimization: Use pre-indexed farmers if available
+      const farmers = context.context?.residentsByJob['FARMER'] || context.residents.filter(resident => resident.job === 'FARMER');
+      
       if (farmers.length > 0) {
         const share = netIncome / farmers.length;
         farmers.forEach(farmer => {
           farmer.cash += share;
         });
       }
-    } else if (to !== 'MARKET') {
-      // @ts-ignore - 'to' is Resident | Company | CityTreasury which have 'cash'
-      to.cash += amount;
+    } else if (to !== 'MARKET' && typeof to === 'object' && 'cash' in to) {
+      (to as CashEntity).cash += amount;
     }
 
     return true;

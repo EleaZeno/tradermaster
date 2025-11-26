@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { GameState, GodModeData, ResourceType, ProductType } from "../shared/types";
 
@@ -10,6 +11,12 @@ const NEWS_EVENTS = [
 ];
 
 const getEconomicSummary = (gameState: GameState, godModeData: GodModeData) => {
+    // Helper to get total size from OrderBook Asks
+    const getSupply = (itemId: string) => {
+        const book = gameState.market[itemId];
+        return book ? book.asks.reduce((s, o) => s + (o.amount - o.filled), 0) : 0;
+    };
+
     return {
         day: gameState.day,
         prices: {
@@ -17,8 +24,8 @@ const getEconomicSummary = (gameState: GameState, godModeData: GodModeData) => {
             bread: gameState.products[ProductType.BREAD].marketPrice,
         },
         inventory: {
-            grain: gameState.resources[ResourceType.GRAIN].marketInventory,
-            bread: gameState.products[ProductType.BREAD].marketInventory,
+            grain: getSupply(ResourceType.GRAIN),
+            bread: getSupply(ProductType.BREAD),
         },
         companies: gameState.companies.map(c => ({
             name: c.name,

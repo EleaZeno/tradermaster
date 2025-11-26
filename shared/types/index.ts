@@ -1,3 +1,4 @@
+
 import { ReactNode } from 'react';
 
 export enum ResourceType {
@@ -8,7 +9,7 @@ export enum ProductType {
   BREAD = 'BREAD'
 }
 
-export type IndustryType = ResourceType | ProductType;
+export type IndustryType = ResourceType | ProductType | string; // string for Company IDs
 
 export type LivingStandard = 'SURVIVAL' | 'BASIC' | 'COMFORT' | 'LUXURY';
 
@@ -37,7 +38,6 @@ export interface ResourceItem {
   name: string;
   basePrice: number;
   currentPrice: number;
-  marketInventory: number;
   owned: number;
   dailySales: number; 
   lastTransactionPrice: number; 
@@ -52,7 +52,6 @@ export interface ProductItem {
   requirements: Partial<Record<ResourceType, number>>;
   marketPrice: number;
   basePrice: number;
-  marketInventory: number;
   owned: number;
   dailySales: number; 
   lastTransactionPrice: number;
@@ -72,6 +71,33 @@ export interface FuturesPosition {
 
 export type FuturesContract = FuturesPosition;
 
+export interface Loan {
+  id: string;
+  borrowerId: string;
+  principal: number;
+  remainingPrincipal: number;
+  interestRate: number; // Daily rate
+  dueDate: number;
+}
+
+export interface Deposit {
+  id: string;
+  ownerId: string;
+  amount: number;
+  interestRate: number;
+}
+
+export interface Bank {
+  reserves: number;
+  totalDeposits: number;
+  totalLoans: number;
+  depositRate: number; // Daily
+  loanRate: number;    // Daily
+  loans: Loan[];
+  deposits: Deposit[];
+  history: { day: number; reserves: number; rates: number }[];
+}
+
 export interface Resident {
   id: string;
   name: string;
@@ -87,8 +113,11 @@ export interface Resident {
   happiness: number;
   livingStandard: LivingStandard; 
   timePreference: number; 
+  // Economic Parameters
+  reservationWage: number;
+  propensityToConsume: number; // 0.0 to 1.0 (MPC)
   needs: Record<string, number>; 
-  inventory: Partial<Record<IndustryType, number>>;
+  inventory: Partial<Record<string, number>>;
   portfolio: Record<string, number>; 
   futuresPositions: FuturesPosition[]; 
   politicalStance: 'CAPITALIST' | 'SOCIALIST' | 'CENTRIST';
@@ -119,6 +148,7 @@ export interface FinancialReport {
     materials: number;
     dividends: number;
     taxes: number;
+    interest: number;
   };
   operatingMargin: number;
 }
@@ -133,7 +163,7 @@ export interface Shareholder {
 export interface ProductionLine {
   type: IndustryType;
   isActive: boolean;
-  efficiency: number; 
+  efficiency: number; // Represents 'A' (Total Factor Productivity)
   allocation: number; 
 }
 
@@ -170,7 +200,7 @@ export interface Company {
     raw: Partial<Record<ResourceType, number>>;
     finished: Partial<Record<IndustryType, number>>;
   };
-  landTokens?: number;
+  landTokens?: number; // Represents 'K' (Capital)
   avgCost: number;
   accumulatedRevenue: number;
   accumulatedCosts: number;
@@ -261,6 +291,16 @@ export interface IndustryStat {
   marketShare: number;
 }
 
+export interface InventoryAuditItem {
+  total: number;
+  residents: number;
+  companies: number;
+  market: number; 
+  produced: number; 
+  consumed: number; 
+  spoiled: number;
+}
+
 export interface EconomicSnapshot {
   totalResidentCash: number;
   totalCorporateCash: number;
@@ -270,15 +310,40 @@ export interface EconomicSnapshot {
   totalInventoryValue: number; 
   totalMarketCap: number; 
   totalFuturesNotional: number; 
-  inventoryAudit: Record<string, {
-      total: number;
-      residents: number;
-      companies: number;
-      market: number; 
-      produced: number; 
-      consumed: number; 
-      spoiled: number;
-  }>;
+  inventoryAudit: Record<string, InventoryAuditItem>;
+}
+
+// --- ORDER BOOK TYPES ---
+
+export type OrderSide = 'BUY' | 'SELL';
+export type OrderType = 'LIMIT' | 'MARKET';
+
+export interface Order {
+    id: string;
+    ownerId: string;
+    ownerType: 'RESIDENT' | 'COMPANY' | 'TREASURY'; 
+    itemId: string;
+    side: OrderSide;
+    type: OrderType;
+    price: number; 
+    amount: number;
+    filled: number;
+    timestamp: number;
+}
+
+export interface Trade {
+    price: number;
+    amount: number;
+    timestamp: number;
+    buyerId: string;
+    sellerId: string;
+}
+
+export interface OrderBook {
+    bids: Order[]; // Sorted Price Descending
+    asks: Order[]; // Sorted Price Ascending
+    lastPrice: number;
+    history: Trade[];
 }
 
 export interface GameState {
@@ -286,6 +351,7 @@ export interface GameState {
   day: number;
   mayorId: string | null;
   cityTreasury: CityTreasury;
+  bank: Bank; // Central Bank
   election: Election;
   population: PopulationState;
   resources: Record<ResourceType, ResourceItem>;
@@ -299,9 +365,31 @@ export interface GameState {
   chatHistory: ChatMessage[];
   logs: string[];
   economicOverview: EconomicSnapshot; 
+  market: Record<string, OrderBook>;
 }
 
 export interface AgentAdvice {
   text: string;
   action?: string;
+}
+
+export interface CashEntity {
+  cash: number;
+}
+
+export interface FlowStatsData {
+  produced: number;
+  consumed: number;
+  spoiled: number;
+}
+
+export type FlowStats = Record<IndustryType, FlowStatsData>;
+
+export type TransactionParty = Resident | Company | CityTreasury | 'TREASURY' | 'MARKET' | 'GATHERERS';
+
+export interface GameContext {
+    residentMap: Map<string, Resident>;
+    companyMap: Map<string, Company>;
+    employeesByCompany: Record<string, Resident[]>;
+    residentsByJob: Record<string, Resident[]>;
 }

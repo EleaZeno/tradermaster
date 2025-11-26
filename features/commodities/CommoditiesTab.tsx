@@ -1,6 +1,7 @@
+
 import React, { useState } from 'react';
 import { ResourceType, ResourceItem, ProductType, ProductItem, FuturesContract, IndustryType } from '../../shared/types';
-import { RESOURCE_ICONS } from '../../constants';
+import { RESOURCE_ICONS } from '../../shared/assets';
 import { Card } from '../../shared/components';
 import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
 import { CommodityModal } from './CommodityModal';

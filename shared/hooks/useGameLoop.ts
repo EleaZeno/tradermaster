@@ -1,3 +1,4 @@
+
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '../store/useGameStore';
 
@@ -7,10 +8,10 @@ export const useGameLoop = () => {
   const tick = useGameStore(state => state.tick);
   
   const gameState = useGameStore(state => state.gameState);
-  const setIsRunning = (value: boolean) => value ? useGameStore.getState().start(true) : useGameStore.getState().stop(true);
+  const setIsRunning = (value: boolean) => value ? useGameStore.getState().start() : useGameStore.getState().stop();
 
-  const requestRef = useRef<number>();
-  const lastTimeRef = useRef<number>();
+  const requestRef = useRef<number | undefined>(undefined);
+  const lastTimeRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!isRunning) {

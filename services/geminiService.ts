@@ -1,3 +1,4 @@
+
 import { GameState, GodModeData, ResourceType, ProductType } from "../shared/types";
 
 const ADVICE_TEMPLATES = {
@@ -41,7 +42,9 @@ export const getFinancialAdvisorResponse = async (
 
   const msg = userMessage.toLowerCase();
   
-  const grainStock = gameState.resources[ResourceType.GRAIN].marketInventory;
+  const grainMarket = gameState.market[ResourceType.GRAIN];
+  const grainStock = grainMarket ? grainMarket.asks.reduce((acc, order) => acc + (order.amount - order.filled), 0) : 0;
+  
   if (grainStock < 20) return pickTemplate(ADVICE_TEMPLATES.CRISIS_FAMINE, {});
 
   if (godModeData.affordabilityIndex > 0.45) {

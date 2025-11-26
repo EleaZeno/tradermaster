@@ -1,27 +1,51 @@
-import { GameState, ResourceType, ProductType } from '../shared/types';
+
+import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident } from '../shared/types';
 import { LaborSystem } from './systems/LaborSystem';
 import { ProductionSystem } from './systems/ProductionSystem';
-import { MarketSystem } from './systems/MarketSystem';
 import { ConsumerSystem } from './systems/ConsumerSystem';
 import { FinancialSystem } from './systems/FinancialSystem';
+import { BankingSystem } from './systems/BankingSystem';
 
 /**
  * Main Game Loop Processor
  * Executes all sub-systems in order for a single game day.
  */
-export const processGameTick = (gameState: GameState) => {
+export const processGameTick = (gameState: GameState): void => {
     resetDailyCounters(gameState);
     
-    // Track production flows for auditing
-    const flowStats = {
+    // --- OPTIMIZATION: Build Indices & Cache ---
+    const residentMap = new Map<string, Resident>();
+    const companyMap = new Map(gameState.companies.map(c => [c.id, c]));
+    const employeesByCompany: Record<string, Resident[]> = {};
+    const residentsByJob: Record<string, Resident[]> = {};
+
+    gameState.population.residents.forEach(r => {
+        residentMap.set(r.id, r);
+        
+        if (r.employerId) {
+            if (!employeesByCompany[r.employerId]) employeesByCompany[r.employerId] = [];
+            employeesByCompany[r.employerId].push(r);
+        }
+
+        if (!residentsByJob[r.job]) residentsByJob[r.job] = [];
+        residentsByJob[r.job].push(r);
+    });
+
+    const context: GameContext = {
+        residentMap,
+        companyMap,
+        employeesByCompany,
+        residentsByJob
+    };
+    // -----------------------------------------------------------------------------------------
+    
+    const flowStats: FlowStats = {
         [ResourceType.GRAIN]: { produced: 0, consumed: 0, spoiled: 0 },
         [ProductType.BREAD]: { produced: 0, consumed: 0, spoiled: 0 }
     };
     
-    // Helper to calculate modifiers from active events
-    const getEventModifier = (target: string) => {
+    const getEventModifier = (target: string): number => {
         let modifier = 1.0;
-        // Filter events created within the last 5 days
         const activeEvents = gameState.events.filter(event => gameState.day - event.turnCreated < 5);
         activeEvents.forEach(event => {
             if (event.effect && event.effect.target === target) {
@@ -31,31 +55,31 @@ export const processGameTick = (gameState: GameState) => {
         return modifier;
     };
 
-    // 1. Labor System: Wages, Employment, Social Mobility
+    // 0. Banking System (Credit Creation/Destruction)
+    BankingSystem.process(gameState, context);
+
+    // 1. Labor System
     const grainPriceBenchmark = Math.max(0.1, gameState.resources[ResourceType.GRAIN].currentPrice);
     const wagePressureModifier = getEventModifier('WAGE');
-    LaborSystem.process(gameState, grainPriceBenchmark, wagePressureModifier);
+    LaborSystem.process(gameState, context, grainPriceBenchmark, wagePressureModifier);
 
-    // 2. Production System: Farming, Manufacturing, Spoilage
-    ProductionSystem.process(gameState, flowStats, getEventModifier);
+    // 2. Production System (Cobb-Douglas)
+    ProductionSystem.process(gameState, context, flowStats, getEventModifier);
 
-    // 3. Consumer System: Eating, Buying Food, Happiness
-    ConsumerSystem.process(gameState, flowStats);
+    // 3. Consumer System (Keynesian)
+    ConsumerSystem.process(gameState, context, flowStats);
 
-    // 4. Financial System: Stock Market, Fiscal Policy, Audits
+    // 4. Financial System
     FinancialSystem.processStockMarket(gameState);
-    FinancialSystem.manageFiscalPolicy(gameState); 
+    FinancialSystem.manageFiscalPolicy(gameState, context); 
     FinancialSystem.runAudit(gameState, flowStats);
-
-    // 5. Market System: Price Updates
-    MarketSystem.updatePrices(gameState, getEventModifier);
 
     // Finalize Turn
     updatePlayerStatus(gameState);
     gameState.day += 1;
 };
 
-const resetDailyCounters = (gameState: GameState) => {
+const resetDailyCounters = (gameState: GameState): void => {
     gameState.resources[ResourceType.GRAIN].dailySales = 0;
     gameState.resources[ResourceType.GRAIN].demand = 0;
     gameState.products[ProductType.BREAD].dailySales = 0;
@@ -70,7 +94,7 @@ const resetDailyCounters = (gameState: GameState) => {
     });
 };
 
-const updatePlayerStatus = (gameState: GameState) => {
+const updatePlayerStatus = (gameState: GameState): void => {
     const player = gameState.population.residents.find(resident => resident.isPlayer);
     if (player) {
         gameState.cash = player.cash;

@@ -1,8 +1,9 @@
+
 import React from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { GameState, IndustryStat, ResourceType, ProductType, EconomicSnapshot } from '../../shared/types';
 import { Card } from '../../shared/components';
-import { RESOURCE_ICONS } from '../../constants';
+import { RESOURCE_ICONS } from '../../shared/assets';
 import { ArrowUp, ArrowDown } from 'lucide-react';
 
 interface StatsTabProps {

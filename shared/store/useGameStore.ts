@@ -1,8 +1,11 @@
+
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { GameState, Company, ResourceType, ProductType, IndustryType, Resident, FuturesContract, MarketEvent } from '../types';
-import { INITIAL_PLAYER_CASH, INITIAL_CITY_TREASURY, INITIAL_RESOURCES, INITIAL_PRODUCTS, INITIAL_COMPANIES, INITIAL_FUNDS, INITIAL_POPULATION, INITIAL_ELECTION } from '../../constants';
+import { GameState, Company, ResourceType, ProductType, IndustryType, Resident, FuturesContract, MarketEvent, OrderBook } from '../types';
+import { INITIAL_POPULATION, INITIAL_CITY_TREASURY, INITIAL_ELECTION, INITIAL_RESOURCES, INITIAL_PRODUCTS, INITIAL_COMPANIES, INITIAL_FUNDS, INITIAL_STATE } from '../initialState';
+import { GAME_CONFIG } from '../config';
 import { processGameTick } from '../../domain/gameLogic';
+import { MarketSystem } from '../../domain/systems/MarketSystem';
 
 interface GameStore {
   gameState: GameState;
@@ -10,8 +13,8 @@ interface GameStore {
   gameSpeed: number;
   
   // Actions
-  start: (v?: boolean) => void;
-  stop: (v?: boolean) => void;
+  start: () => void;
+  stop: () => void;
   setGameSpeed: (speed: number) => void;
   tick: () => void;
   addLog: (log: string) => void;
@@ -32,38 +35,14 @@ interface GameStore {
   setLivingStandard: (level: any) => void;
 }
 
-const INITIAL_STATE: GameState = {
-    cash: INITIAL_PLAYER_CASH,
-    day: 1,
-    mayorId: 'res_mayor',
-    cityTreasury: INITIAL_CITY_TREASURY,
-    election: INITIAL_ELECTION,
-    population: INITIAL_POPULATION,
-    resources: INITIAL_RESOURCES,
-    products: INITIAL_PRODUCTS,
-    companies: INITIAL_COMPANIES,
-    funds: INITIAL_FUNDS,
-    futures: [], 
-    events: [],
-    netWorthHistory: [{ day: 1, value: INITIAL_PLAYER_CASH }],
-    macroHistory: [],
-    chatHistory: [{ role: 'model', text: '微型社会模拟 v6.0 (Chaos Mode) 已启动。\n系统已接入本地事件引擎。', timestamp: Date.now() }],
-    logs: ["🏗️ 系统初始化完成"],
-    economicOverview: {
-        totalResidentCash: 0, totalCorporateCash: 0, totalFundCash: 0, totalCityCash: 0, totalSystemGold: 0,
-        totalInventoryValue: 0, totalMarketCap: 0, totalFuturesNotional: 0,
-        inventoryAudit: {}
-    }
-};
-
 export const useGameStore = create<GameStore>()(
   immer((set, get) => ({
     gameState: INITIAL_STATE,
     isRunning: false,
     gameSpeed: 1, 
 
-    start: (v) => set((state) => { state.isRunning = true }),
-    stop: (v) => set((state) => { state.isRunning = false }),
+    start: () => set((state) => { state.isRunning = true }),
+    stop: () => set((state) => { state.isRunning = false }),
     setGameSpeed: (speed) => set((state) => { state.gameSpeed = speed }),
 
     tick: () => set((state) => {
@@ -95,34 +74,19 @@ export const useGameStore = create<GameStore>()(
             : state.gameState.products[itemId as ProductType].marketPrice;
             
           let amount = isRes ? 10 : 1; 
-          let cost = price * amount;
 
-          if (action === 'buy') {
-               if (playerRes.cash >= cost) {
-                   playerRes.cash -= cost;
-                   state.gameState.cash = playerRes.cash;
-                   playerRes.inventory[itemId] = (playerRes.inventory[itemId] || 0) + amount;
-                   
-                   if (isRes) {
-                       state.gameState.resources[itemId as ResourceType].marketInventory -= amount;
-                        const gatherers = residents.filter(r => r.job === 'FARMER');
-                        if (gatherers.length > 0) gatherers.forEach(g => g.cash += cost / gatherers.length);
-                   } else {
-                       const seller = state.gameState.companies.find(c => (c.inventory.finished[itemId as ProductType] || 0) > 0);
-                       if (seller) {
-                           seller.inventory.finished[itemId as ProductType]! -= amount;
-                           seller.cash += cost;
-                       }
-                   }
-               }
-          } else {
-               if ((playerRes.inventory[itemId] || 0) >= amount) {
-                   playerRes.inventory[itemId]! -= amount;
-                   playerRes.cash += cost * 0.8; 
-                   state.gameState.cash = playerRes.cash;
-                   if (isRes) state.gameState.resources[itemId as ResourceType].marketInventory += amount;
-               }
-          }
+          // Player trading is now Order Driven
+          MarketSystem.submitOrder(state.gameState, {
+              ownerId: playerRes.id,
+              ownerType: 'RESIDENT',
+              itemId: itemId,
+              side: action === 'buy' ? 'BUY' : 'SELL',
+              type: 'MARKET', // Player executes at Market for simplicity in this function
+              price: 0,
+              amount: amount
+          });
+          
+          state.gameState.cash = playerRes.cash;
     }),
 
     createCompany: (name, type) => set((state) => {
@@ -146,13 +110,16 @@ export const useGameStore = create<GameStore>()(
                 wageOffer: 1.5, wageMultiplier: 1.5, 
                 pricePremium: 0, executiveSalary: 3.0, dividendRate: 0, margin: 0.2,
                 aiPersonality: 'BALANCED', boardMembers: [], unionTension: 0, strikeDays: 0,
-                inventory: { raw: {}, finished: {} }, avgCost: 0,
-                accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0,
-                monthlySalesVolume: 0, monthlyProductionVolume: 0, lastRevenue: 0, lastProfit: 0,
-                reports: [], history: [{ day: state.gameState.day, open: 1.0, high: 1.0, low: 1.0, close: 1.0, volume: 0 }],
+                inventory: { raw: {}, finished: { [type]: 0 } }, 
                 // @ts-ignore
-                type: 'CORPORATION', wageStructure: 'PERFORMANCE', ceoId: 'res_player', isBankrupt: false
+                type: 'CORPORATION', wageStructure: 'PERFORMANCE', ceoId: 'res_player', isBankrupt: false, landTokens: 0,
+                avgCost: 0, accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0,
+                lastRevenue: 0, lastProfit: 0, monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: []
             });
+            
+            // Initialize Order Book for new company
+            state.gameState.market[newId] = { bids: [], asks: [], lastPrice: 1.0, history: [] };
+            
             state.gameState.logs.unshift(`🎉 ${name} 上市成功！`);
         }
     }),
@@ -167,20 +134,22 @@ export const useGameStore = create<GameStore>()(
         if (!player) return;
         
         if (!isFund) {
-            const comp = state.gameState.companies.find(c => c.id === id);
-            if (comp) {
-                const cost = comp.sharePrice * 100;
-                if (player.cash >= cost) {
-                    player.cash -= cost;
-                    state.gameState.cash = player.cash;
-                    player.portfolio[id] = (player.portfolio[id] || 0) + 100;
-                    comp.ownedShares += 100;
-                    
-                    const sh = comp.shareholders.find(s => s.type === 'PLAYER');
-                    if (sh) sh.count += 100;
-                    else comp.shareholders.push({id: 'res_player', name: 'Player', count: 100, type: 'PLAYER'});
-                }
-            }
+             MarketSystem.submitOrder(state.gameState, {
+                ownerId: player.id,
+                ownerType: 'RESIDENT',
+                itemId: id,
+                side: 'BUY',
+                type: 'MARKET',
+                price: 0,
+                amount: 100 // Buy 100 shares
+            });
+            state.gameState.cash = player.cash;
+            
+            // Note: Ownership tracking is now handled in MarketSystem transfer logic
+            // We need to manually update ownedShares count for company? 
+            // The transfer logic updates `resident.portfolio`.
+            // It does NOT update `company.ownedShares` (which was 'shares owned by others'?).
+            // In LOB, shares are conserved. 
         }
     }),
 
@@ -188,19 +157,16 @@ export const useGameStore = create<GameStore>()(
          const player = state.gameState.population.residents.find(r => r.isPlayer);
          if (!player) return;
          
-         const current = player.portfolio[id] || 0;
-         if (current >= 100) {
-             const comp = state.gameState.companies.find(c => c.id === id);
-             if (comp) {
-                 const val = comp.sharePrice * 100;
-                 player.cash += val;
-                 state.gameState.cash = player.cash;
-                 player.portfolio[id] -= 100;
-                 comp.ownedShares -= 100;
-                 const sh = comp.shareholders.find(s => s.type === 'PLAYER');
-                 if (sh) sh.count -= 100;
-             }
-         }
+         MarketSystem.submitOrder(state.gameState, {
+            ownerId: player.id,
+            ownerType: 'RESIDENT',
+            itemId: id,
+            side: 'SELL',
+            type: 'MARKET',
+            price: 0,
+            amount: 100 // Sell 100 shares
+        });
+        state.gameState.cash = player.cash;
     }),
     
     shortStock: () => {}, 

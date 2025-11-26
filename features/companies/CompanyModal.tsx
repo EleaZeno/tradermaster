@@ -1,8 +1,9 @@
+
 import React, { useState } from 'react';
 import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart } from 'lucide-react';
 import { Company, ProductType, ProductItem, ResourceType, IndustryType, ResourceItem } from '../../shared/types';
 import { Card, Button } from '../../shared/components';
-import { RESOURCE_ICONS } from '../../constants';
+import { RESOURCE_ICONS } from '../../shared/assets';
 import { KLineChart } from '../../shared/components/charts/KLineChart';
 
 interface CompanyModalProps {

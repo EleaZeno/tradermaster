@@ -9,7 +9,7 @@ export enum ProductType {
   BREAD = 'BREAD'
 }
 
-export type IndustryType = ResourceType | ProductType;
+export type IndustryType = ResourceType | ProductType | string; // string for Company IDs
 
 export type LivingStandard = 'SURVIVAL' | 'BASIC' | 'COMFORT' | 'LUXURY';
 
@@ -38,7 +38,6 @@ export interface ResourceItem {
   name: string;
   basePrice: number;
   currentPrice: number;
-  marketInventory: number;
   owned: number;
   dailySales: number; 
   lastTransactionPrice: number; 
@@ -53,7 +52,6 @@ export interface ProductItem {
   requirements: Partial<Record<ResourceType, number>>;
   marketPrice: number;
   basePrice: number;
-  marketInventory: number;
   owned: number;
   dailySales: number; 
   lastTransactionPrice: number;
@@ -89,7 +87,7 @@ export interface Resident {
   livingStandard: LivingStandard; 
   timePreference: number; 
   needs: Record<string, number>; 
-  inventory: Partial<Record<IndustryType, number>>;
+  inventory: Partial<Record<string, number>>;
   portfolio: Record<string, number>; 
   futuresPositions: FuturesPosition[]; 
   politicalStance: 'CAPITALIST' | 'SOCIALIST' | 'CENTRIST';
@@ -262,6 +260,16 @@ export interface IndustryStat {
   marketShare: number;
 }
 
+export interface InventoryAuditItem {
+  total: number;
+  residents: number;
+  companies: number;
+  market: number; 
+  produced: number; 
+  consumed: number; 
+  spoiled: number;
+}
+
 export interface EconomicSnapshot {
   totalResidentCash: number;
   totalCorporateCash: number;
@@ -271,15 +279,40 @@ export interface EconomicSnapshot {
   totalInventoryValue: number; 
   totalMarketCap: number; 
   totalFuturesNotional: number; 
-  inventoryAudit: Record<string, {
-      total: number;
-      residents: number;
-      companies: number;
-      market: number; 
-      produced: number; 
-      consumed: number; 
-      spoiled: number;
-  }>;
+  inventoryAudit: Record<string, InventoryAuditItem>;
+}
+
+// --- ORDER BOOK TYPES ---
+
+export type OrderSide = 'BUY' | 'SELL';
+export type OrderType = 'LIMIT' | 'MARKET';
+
+export interface Order {
+    id: string;
+    ownerId: string;
+    ownerType: 'RESIDENT' | 'COMPANY' | 'TREASURY'; 
+    itemId: string;
+    side: OrderSide;
+    type: OrderType;
+    price: number; 
+    amount: number;
+    filled: number;
+    timestamp: number;
+}
+
+export interface Trade {
+    price: number;
+    amount: number;
+    timestamp: number;
+    buyerId: string;
+    sellerId: string;
+}
+
+export interface OrderBook {
+    bids: Order[]; // Sorted Price Descending
+    asks: Order[]; // Sorted Price Ascending
+    lastPrice: number;
+    history: Trade[];
 }
 
 export interface GameState {
@@ -300,6 +333,7 @@ export interface GameState {
   chatHistory: ChatMessage[];
   logs: string[];
   economicOverview: EconomicSnapshot; 
+  market: Record<string, OrderBook>;
 }
 
 export interface AgentAdvice {

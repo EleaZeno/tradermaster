@@ -28,9 +28,9 @@ export const getFinancialAdvisorResponse = async (
     return "如果公司亏损，请检查'进销存'面板。通常是因为原材料太贵，或者生产出来的商品卖不出去（库存积压）。您可以尝试裁员或降薪来度过难关。";
   }
   if (msg.includes("野果") || msg.includes("粮食") || msg.includes("食物")) {
-    // @ts-ignore
-    const stock = gameState.resources['GRAIN']?.marketInventory || 0;
-    return `当前的粮食库存为 ${Math.floor(stock)}。如果库存持续下降，建议投资'伊甸农业'或'伊甸食品'来扩大生产。`;
+    const grainBook = gameState.market['GRAIN'];
+    const stock = grainBook ? grainBook.asks.reduce((acc, order) => acc + (order.amount - order.filled), 0) : 0;
+    return `当前的粮食市场供应量为 ${Math.floor(stock)}。如果库存持续下降，建议投资'伊甸农业'或'伊甸食品'来扩大生产。`;
   }
   if (msg.includes("股票") || msg.includes("股价")) {
     return "股价反映了未来的盈利预期。如果公司连续盈利且分红，散户会蜂拥买入，推高股价。反之亦然。";

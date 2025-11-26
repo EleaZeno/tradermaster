@@ -1,8 +1,8 @@
-import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType } from '../../shared/types';
+import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType, FlowStats, GameContext } from '../../shared/types';
 import { Transaction } from '../utils/Transaction';
 
 export class FinancialSystem {
-  static updateStockPrices(state: GameState) {
+  static updateStockPrices(state: GameState): void {
       state.companies.forEach(comp => {
         if (comp.isBankrupt) {
           comp.sharePrice = Math.max(0.01, comp.sharePrice * 0.95);
@@ -11,10 +11,8 @@ export class FinancialSystem {
 
         const eps = comp.lastProfit / comp.totalShares;
         
-        const currentPE = eps > 0 ? comp.sharePrice / eps : 999;
-        
+        // Use PE ratio (simplified)
         let targetPrice = 0;
-        
         const bookValue = comp.cash / comp.totalShares; 
         
         if (eps > 0) {
@@ -25,9 +23,7 @@ export class FinancialSystem {
         }
 
         const smoothedPrice = (comp.sharePrice * 0.9) + (targetPrice * 0.1);
-        
         const noise = 1 + (Math.random() - 0.5) * 0.05;
-        
         let finalPrice = smoothedPrice * noise;
         
         finalPrice = Math.max(0.1, finalPrice);
@@ -44,20 +40,23 @@ export class FinancialSystem {
       });
   }
 
-  static processStockMarket(state: GameState) {
+  static processStockMarket(state: GameState): void {
       this.updateStockPrices(state);
   }
 
-  static runAudit(state: GameState, flowStats: any) {
+  static runAudit(state: GameState, flowStats: FlowStats): void {
     const audit: EconomicSnapshot['inventoryAudit'] = {};
     
-    state.products[ProductType.BREAD].marketInventory = state.companies.reduce((acc, c) => acc + (c.inventory.finished[ProductType.BREAD] || 0), 0);
+    // Check Market Inventory via Order Book (Sell Side)
+    const getMarketSupply = (itemId: string) => {
+        const book = state.market[itemId];
+        return book ? book.asks.reduce((s, o) => s + (o.amount - o.filled), 0) : 0;
+    };
 
-    [ResourceType.GRAIN, ProductType.BREAD].forEach(t => {
-        const type = t as IndustryType;
+    ([ResourceType.GRAIN, ProductType.BREAD] as IndustryType[]).forEach(type => {
         let resCount = state.population.residents.reduce((s, r) => s + (r.inventory[type] || 0), 0);
         let compCount = state.companies.reduce((s, c) => s + (c.inventory.finished[type] || 0) + (c.inventory.raw[type as ResourceType] || 0), 0);
-        let marketCount = type === ResourceType.GRAIN ? state.resources[ResourceType.GRAIN].marketInventory : 0;
+        let marketCount = getMarketSupply(type);
 
         audit[type] = {
             total: resCount + compCount + marketCount,
@@ -82,7 +81,7 @@ export class FinancialSystem {
     state.economicOverview.totalSystemGold = state.economicOverview.totalResidentCash + state.economicOverview.totalCorporateCash + state.economicOverview.totalCityCash + state.economicOverview.totalFundCash;
   }
 
-  static manageFiscalPolicy(state: GameState) {
+  static manageFiscalPolicy(state: GameState, context: GameContext): void {
       const treasury = state.cityTreasury;
       const M0 = state.economicOverview.totalSystemGold || 1000;
       
@@ -91,7 +90,9 @@ export class FinancialSystem {
       let status: 'AUSTERITY' | 'NEUTRAL' | 'STIMULUS' = 'NEUTRAL';
       let actionLog = "";
 
-      const deputy = state.population.residents.find(r => r.job === 'DEPUTY_MAYOR');
+      // Optimization: Lookup deputy via context map if possible, but finding by Job is fast with indices
+      const deputy = context.residentsByJob['DEPUTY_MAYOR']?.[0];
+      
       let welfareBudget = 0;
       if (deputy) {
           if (treasury.cash > 200) {
@@ -117,7 +118,7 @@ export class FinancialSystem {
               const residents = state.population.residents;
               const perCapita = surplus / residents.length;
               residents.forEach(r => {
-                  Transaction.transfer('TREASURY', r, perCapita, { treasury, residents });
+                  Transaction.transfer('TREASURY', r, perCapita, { treasury, residents, context });
               });
               actionLog += `全民分红 ${Math.floor(surplus)} oz`;
           } else {

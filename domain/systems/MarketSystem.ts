@@ -1,176 +1,365 @@
-import { GameState, IndustryType, ResourceType, ProductType, Company, Resident, Candle } from '../../shared/types';
-import { Transaction } from '../utils/Transaction';
-
-interface SellOrder {
-    sellerType: 'GATHERERS' | 'COMPANY';
-    sellerId: string;
-    price: number;
-    available: number;
-    ref: any;
-}
+import { GameState, IndustryType, ResourceType, ProductType, Order, OrderSide, OrderType, Trade, OrderBook, GameContext } from '../../shared/types';
 
 export class MarketSystem {
+  
   /**
-   * Constructs a sorted list of sell orders for a specific commodity.
+   * Submits an order to the matching engine.
+   * Handles asset locking (escrow), matching, and book updates.
+   * Uses GameContext for O(1) entity lookups to reduce complexity.
    */
-  static buildOrderBook(gameState: GameState, itemType: IndustryType): SellOrder[] {
-    const orders: SellOrder[] = [];
-    
-    // 1. Gatherers (Farmers) selling directly to market
-    if (itemType === ResourceType.GRAIN && gameState.resources[ResourceType.GRAIN].marketInventory > 0.1) {
-        orders.push({
-            sellerType: 'GATHERERS', 
-            sellerId: 'market_gatherers',
-            price: gameState.resources[ResourceType.GRAIN].currentPrice,
-            available: gameState.resources[ResourceType.GRAIN].marketInventory,
-            ref: gameState.resources[ResourceType.GRAIN]
-        });
-    }
-
-    // 2. Companies selling finished goods
-    gameState.companies.forEach(company => {
-        const stock = company.inventory.finished[itemType] || 0;
-        if (!company.isBankrupt && stock > 0.1) {
-            const minPrice = Math.max(0.1, company.avgCost * 1.05);
-            let ask = Math.max(0.1, company.avgCost * (1 + company.margin));
-            ask = ask * (1 + (company.pricePremium || 0));
-            
-            orders.push({ 
-                sellerType: 'COMPANY', 
-                sellerId: company.id, 
-                price: Math.max(minPrice, ask), 
-                available: stock, 
-                ref: company 
-            });
-        }
-    });
-
-    return orders.sort((a, b) => a.price - b.price);
-  }
-
-  /**
-   * Attempts to execute a purchase transaction.
-   */
-  static attemptPurchase(
-      gameState: GameState, 
-      buyer: Resident | Company | 'TREASURY', 
-      itemType: IndustryType, 
-      quantity: number = 1
+  static submitOrder(
+      state: GameState, 
+      order: Omit<Order, 'id' | 'filled' | 'timestamp'>,
+      context?: GameContext
   ): boolean {
-      if (quantity <= 0) return false;
-
-      // Track demand
-      if (itemType === ResourceType.GRAIN) gameState.resources[ResourceType.GRAIN].demand += quantity;
-      if (itemType === ProductType.BREAD) gameState.products[ProductType.BREAD].demand += quantity;
-
-      const orders = MarketSystem.buildOrderBook(gameState, itemType);
-      if (orders.length === 0) return false;
-
-      const bestOrder = orders[0];
-      const basePrice = bestOrder.price;
-      const isGov = buyer === 'TREASURY';
-      
-      const taxRate = gameState.cityTreasury.taxPolicy.consumptionTaxRate;
-      const tax = isGov ? 0 : basePrice * taxRate;
-      const totalCost = basePrice + tax;
-
-      // Check Funds
-      let buyerCash = isGov ? gameState.cityTreasury.cash : (buyer as any).cash;
-      if (buyerCash < totalCost) return false;
-
-      let sellerRef = bestOrder.sellerType === 'GATHERERS' ? 'GATHERERS' : bestOrder.ref;
-      
-      // Execute Transfer
-      if (Transaction.transfer(buyer, sellerRef, basePrice, { treasury: gameState.cityTreasury, residents: gameState.population.residents })) {
-          
-          // Handle Taxes
-          if (!isGov && tax > 0) {
-              Transaction.transfer(buyer, 'TREASURY', tax, { treasury: gameState.cityTreasury, residents: gameState.population.residents });
-              gameState.cityTreasury.dailyIncome += tax;
-          } else if (isGov) {
-              gameState.cityTreasury.dailyExpense += basePrice;
-          }
-
-          // Handle Inventory & Stats
-          if (bestOrder.sellerType === 'COMPANY') {
-              const company = bestOrder.ref as Company;
-              company.inventory.finished[itemType]! -= 1;
-              company.monthlySalesVolume += 1;
-              company.accumulatedRevenue += basePrice;
-              company.lastProfit += basePrice;
-
-              // Corporate Tax on Revenue (Simplified)
-              const corpTax = basePrice * gameState.cityTreasury.taxPolicy.corporateTaxRate;
-              if (company.cash >= corpTax) {
-                  Transaction.transfer(company, 'TREASURY', corpTax, { treasury: gameState.cityTreasury, residents: gameState.population.residents });
-                  gameState.cityTreasury.dailyIncome += corpTax;
-              }
-
-              if (itemType === ProductType.BREAD) gameState.products[ProductType.BREAD].dailySales += 1;
-          } else {
-              if (itemType === ResourceType.GRAIN) {
-                  gameState.resources[ResourceType.GRAIN].currentPrice = basePrice;
-                  gameState.resources[ResourceType.GRAIN].marketInventory -= 1;
-                  gameState.resources[ResourceType.GRAIN].dailySales += 1;
-              }
-          }
-          return true;
+      // 1. Validate and Lock Assets (Escrow)
+      if (!MarketSystem.lockAssets(state, order, context)) {
+          return false;
       }
-      return false;
-  }
 
-  static updatePrices(gameState: GameState, getEventMod: (t: string) => number) {
-      const totalResidentCash = gameState.economicOverview.totalResidentCash;
-      const totalCompanyCash = gameState.economicOverview.totalCorporateCash;
-      const liquidM0 = totalResidentCash + totalCompanyCash;
-      
-      const pushCandle = (history: Candle[], newPrice: number, volume: number, day: number) => {
-          const open = history.length > 0 ? history[history.length - 1].close : newPrice;
-          const close = newPrice;
-          const volatility = Math.abs(open - close) + (open * 0.02); 
-          const high = Math.max(open, close) + (Math.random() * volatility);
-          const low = Math.min(open, close) - (Math.random() * volatility);
-          
-          history.push({ day, open, high, low, close, volume });
-          if (history.length > 60) history.shift();
+      const fullOrder: Order = {
+          ...order,
+          id: `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          filled: 0,
+          timestamp: Date.now()
       };
 
-      // 1. Update Grain Price
-      const grainRes = gameState.resources[ResourceType.GRAIN];
-      const grainInventory = Math.max(1, grainRes.marketInventory);
-      
-      const grainMoneySupply = liquidM0 * 0.3; 
-      const theoreticalPrice = (grainMoneySupply * 0.1) / grainInventory;
-      
-      const grainRatio = Math.max(0.1, grainRes.demand) / grainInventory;
-      const grainMod = Math.log(grainRatio + 1) * 0.5 + 0.5;
-      
-      let newGrainPrice = (theoreticalPrice * 0.7) + (grainRes.currentPrice * grainMod * 0.3);
-      grainRes.currentPrice = parseFloat(Math.max(0.1, newGrainPrice).toFixed(2));
-      grainRes.lastTransactionPrice = grainRes.currentPrice;
-
-      pushCandle(grainRes.history, grainRes.currentPrice, grainRes.dailySales, gameState.day);
-
-      // 2. Update Bread Price
-      const breadProd = gameState.products[ProductType.BREAD];
-      const breadInventory = Math.max(1, breadProd.marketInventory);
-      
-      const activeSellers = gameState.companies.filter(c => (c.inventory.finished[ProductType.BREAD] || 0) > 0);
-      let avgCost = 1.5;
-      if (activeSellers.length > 0) {
-          avgCost = activeSellers.reduce((s,c) => s + c.avgCost, 0) / activeSellers.length;
+      // 2. Get or Create Order Book
+      if (!state.market[order.itemId]) {
+          state.market[order.itemId] = { bids: [], asks: [], lastPrice: order.price || 1.0, history: [] };
       }
-      
-      const breadMoneySupply = liquidM0 * 0.2;
-      const theoreticalBreadPrice = (breadMoneySupply * 0.1) / breadInventory;
-      
-      const breadRatio = Math.max(0.1, breadProd.demand) / breadInventory;
-      const breadMod = Math.log(breadRatio + 1) * 0.5 + 0.6;
+      const book = state.market[order.itemId];
 
-      let newBreadPrice = (theoreticalBreadPrice * 0.4) + (avgCost * breadMod * 0.6);
-      
-      breadProd.marketPrice = parseFloat(Math.max(avgCost * 0.8, newBreadPrice).toFixed(2));
+      // 3. Match Order
+      MarketSystem.matchOrder(state, book, fullOrder, context);
 
-      pushCandle(breadProd.history, breadProd.marketPrice, breadProd.dailySales, gameState.day);
+      return true;
   }
+
+  /**
+   * Cancels an order and refunds locked assets.
+   */
+  static cancelOrder(state: GameState, orderId: string, itemId: string, context?: GameContext): void {
+      const book = state.market[itemId];
+      if (!book) return;
+
+      const bidIndex = book.bids.findIndex(o => o.id === orderId);
+      if (bidIndex !== -1) {
+          const order = book.bids[bidIndex];
+          MarketSystem.refundAssets(state, order, order.amount - order.filled, context);
+          book.bids.splice(bidIndex, 1);
+          return;
+      }
+
+      const askIndex = book.asks.findIndex(o => o.id === orderId);
+      if (askIndex !== -1) {
+          const order = book.asks[askIndex];
+          MarketSystem.refundAssets(state, order, order.amount - order.filled, context);
+          book.asks.splice(askIndex, 1);
+          return;
+      }
+  }
+
+  private static lockAssets(state: GameState, order: Omit<Order, 'id' | 'filled' | 'timestamp'>, context?: GameContext): boolean {
+      const totalCost = order.price * order.amount; // For Limit Buy
+      
+      let costToLock = 0;
+      let itemToLock = 0;
+
+      if (order.side === 'BUY') {
+          // BUY: Lock Cash
+          if (order.type === 'LIMIT') {
+              costToLock = order.price * order.amount;
+          } else {
+             // Market Buy: Lock based on best ask or estimation
+             const book = state.market[order.itemId];
+             const bestAsk = book?.asks[0]?.price || 1000; 
+             costToLock = bestAsk * order.amount; 
+          }
+      } else {
+          // SELL: Lock Inventory
+          itemToLock = order.amount;
+      }
+
+      // Perform Locking - Using Context for O(1) Lookup
+      if (order.ownerType === 'RESIDENT') {
+          const resident = context?.residentMap.get(order.ownerId) || state.population.residents.find(r => r.id === order.ownerId);
+          if (!resident) return false;
+
+          if (order.side === 'BUY') {
+              if (resident.cash < costToLock) return false;
+              resident.cash -= costToLock;
+          } else {
+              if (order.itemId.startsWith('comp_')) {
+                   if ((resident.portfolio[order.itemId] || 0) < itemToLock) return false;
+                   resident.portfolio[order.itemId] -= itemToLock;
+              } else {
+                   if ((resident.inventory[order.itemId] || 0) < itemToLock) return false;
+                   resident.inventory[order.itemId]! -= itemToLock;
+              }
+          }
+      } else if (order.ownerType === 'COMPANY') {
+          const company = context?.companyMap.get(order.ownerId) || state.companies.find(c => c.id === order.ownerId);
+          if (!company) return false;
+
+          if (order.side === 'BUY') {
+              if (company.cash < costToLock) return false;
+              company.cash -= costToLock;
+          } else {
+              if ((company.inventory.finished[order.itemId] || 0) < itemToLock) return false;
+              company.inventory.finished[order.itemId]! -= itemToLock;
+          }
+      } else if (order.ownerType === 'TREASURY') {
+          if (order.side === 'BUY') {
+              if (state.cityTreasury.cash < costToLock) return false;
+              state.cityTreasury.cash -= costToLock;
+          }
+      }
+
+      return true;
+  }
+
+  private static refundAssets(state: GameState, order: Order, amountToRefund: number, context?: GameContext): void {
+      if (amountToRefund <= 0.0001) return;
+
+      if (order.ownerType === 'RESIDENT') {
+          const resident = context?.residentMap.get(order.ownerId) || state.population.residents.find(r => r.id === order.ownerId);
+          if (!resident) return;
+
+          if (order.side === 'BUY') {
+              resident.cash += order.price * amountToRefund;
+          } else {
+              if (order.itemId.startsWith('comp_')) {
+                   resident.portfolio[order.itemId] = (resident.portfolio[order.itemId] || 0) + amountToRefund;
+              } else {
+                   resident.inventory[order.itemId] = (resident.inventory[order.itemId] || 0) + amountToRefund;
+              }
+          }
+      } else if (order.ownerType === 'COMPANY') {
+          const company = context?.companyMap.get(order.ownerId) || state.companies.find(c => c.id === order.ownerId);
+          if (!company) return;
+
+          if (order.side === 'BUY') {
+              company.cash += order.price * amountToRefund;
+          } else {
+               company.inventory.finished[order.itemId] = (company.inventory.finished[order.itemId] || 0) + amountToRefund;
+          }
+      } else if (order.ownerType === 'TREASURY') {
+          if (order.side === 'BUY') {
+              state.cityTreasury.cash += order.price * amountToRefund;
+          }
+      }
+  }
+
+  private static matchOrder(state: GameState, book: OrderBook, takerOrder: Order, context?: GameContext): void {
+      const isBuy = takerOrder.side === 'BUY';
+      const opposingBook = isBuy ? book.asks : book.bids;
+      
+      let itemsRemaining = takerOrder.amount;
+      let matchedCount = 0;
+
+      // Batch Matching: Iterate without shifting in loop (O(M) where M is matches)
+      for (let i = 0; i < opposingBook.length && itemsRemaining > 0.0001; i++) {
+          const bestMaker = opposingBook[i];
+          
+          // Price Check
+          if (takerOrder.type === 'LIMIT') {
+              if (isBuy && bestMaker.price > takerOrder.price) break; // Asks too high
+              if (!isBuy && bestMaker.price < takerOrder.price) break; // Bids too low
+          }
+
+          const matchPrice = bestMaker.price; 
+          const matchQty = Math.min(itemsRemaining, bestMaker.amount - bestMaker.filled);
+
+          // Execute Trade Transfer (Uses Context O(1))
+          MarketSystem.executeTradeTransfer(state, takerOrder, bestMaker, matchPrice, matchQty, context);
+
+          // Update State
+          bestMaker.filled += matchQty;
+          takerOrder.filled += matchQty;
+          itemsRemaining -= matchQty;
+
+          // Record History
+          const trade: Trade = {
+              price: matchPrice,
+              amount: matchQty,
+              timestamp: state.day,
+              buyerId: isBuy ? takerOrder.ownerId : bestMaker.ownerId,
+              sellerId: isBuy ? bestMaker.ownerId : takerOrder.ownerId
+          };
+          book.history.push(trade);
+          if (book.history.length > 50) book.history.shift();
+          
+          book.lastPrice = matchPrice;
+          
+          MarketSystem.updateCandle(state, takerOrder.itemId, matchPrice, matchQty, context);
+          
+          // Tax Logic
+          if (!orderIsTreasury(takerOrder) && !orderIsTreasury(bestMaker)) {
+              const tax = (matchPrice * matchQty) * state.cityTreasury.taxPolicy.consumptionTaxRate;
+              const sellerId = isBuy ? bestMaker.ownerId : takerOrder.ownerId;
+              const sellerType = isBuy ? bestMaker.ownerType : takerOrder.ownerType;
+              MarketSystem.deductTax(state, sellerId, sellerType, tax, context);
+          }
+
+          // Mark for removal if filled
+          if (bestMaker.filled >= bestMaker.amount - 0.0001) {
+              matchedCount++;
+          } else {
+              // Partial fill of Maker implies Taker is empty (or Maker was huge)
+          }
+      }
+
+      // Batch Remove Filled Orders: O(N) splice only once, instead of inside loop
+      if (matchedCount > 0) {
+          opposingBook.splice(0, matchedCount);
+      }
+
+      // Handle Remainder (Add to Book)
+      if (itemsRemaining > 0.0001) {
+          if (takerOrder.type === 'LIMIT') {
+              const bookSide = isBuy ? book.bids : book.asks;
+              // Optimized O(log N) Search + O(N) Insert
+              const insertIndex = MarketSystem.getSortedIndex(bookSide, takerOrder.price, isBuy);
+              bookSide.splice(insertIndex, 0, takerOrder);
+          } else {
+              // Market Order Partial Fill -> Refund remainder
+              const refundQty = itemsRemaining;
+              MarketSystem.refundAssets(state, takerOrder, refundQty, context);
+          }
+      }
+  }
+
+  /**
+   * Finds the correct insertion index to maintain sorted order using Binary Search O(log N).
+   * Bids: Descending (High -> Low). FIFO: Equal goes right.
+   * Asks: Ascending (Low -> High). FIFO: Equal goes right.
+   */
+  private static getSortedIndex(array: Order[], price: number, isDesc: boolean): number {
+    let low = 0;
+    let high = array.length;
+    while (low < high) {
+        const mid = (low + high) >>> 1;
+        const itemPrice = array[mid].price;
+        const goRight = isDesc ? itemPrice >= price : itemPrice <= price;
+
+        if (goRight) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+    return low;
+  }
+
+  private static executeTradeTransfer(state: GameState, taker: Order, maker: Order, price: number, qty: number, context?: GameContext): void {
+      // 1. Identify Buyer and Seller Objects (O(1) with Context)
+      const buyerType = taker.side === 'BUY' ? taker.ownerType : maker.ownerType;
+      const buyerId = taker.side === 'BUY' ? taker.ownerId : maker.ownerId;
+      
+      const sellerType = taker.side === 'SELL' ? taker.ownerType : maker.ownerType;
+      const sellerId = taker.side === 'SELL' ? taker.ownerId : maker.ownerId;
+
+      // 2. Transfer Item to Buyer (Item already deducted from Seller during Lock)
+      if (buyerType === 'RESIDENT') {
+          const r = context?.residentMap.get(buyerId) || state.population.residents.find(x => x.id === buyerId);
+          if (r) {
+              if (taker.itemId.startsWith('comp_')) {
+                  r.portfolio[taker.itemId] = (r.portfolio[taker.itemId] || 0) + qty;
+              } else {
+                  r.inventory[taker.itemId] = (r.inventory[taker.itemId] || 0) + qty;
+              }
+          }
+      } else if (buyerType === 'COMPANY') {
+          const c = context?.companyMap.get(buyerId) || state.companies.find(x => x.id === buyerId);
+          if (c) c.inventory.finished[taker.itemId] = (c.inventory.finished[taker.itemId] || 0) + qty; 
+      }
+
+      // 3. Transfer Cash to Seller (Cash already deducted from Buyer during Lock)
+      const cost = price * qty;
+      
+      if (sellerType === 'RESIDENT') {
+          const r = context?.residentMap.get(sellerId) || state.population.residents.find(x => x.id === sellerId);
+          if (r) r.cash += cost;
+      } else if (sellerType === 'COMPANY') {
+          const c = context?.companyMap.get(sellerId) || state.companies.find(x => x.id === sellerId);
+          if (c) {
+              c.cash += cost;
+              c.accumulatedRevenue += cost;
+              c.lastProfit += cost;
+              if (taker.itemId === ProductType.BREAD) c.monthlySalesVolume += qty;
+          }
+      } else if (sellerType === 'TREASURY') {
+          state.cityTreasury.cash += cost;
+      }
+
+      // 4. Refund Excess Cash to Taker Buyer (Price Improvement)
+      if (taker.side === 'BUY' && taker.type === 'LIMIT' && taker.price > price) {
+           const excess = (taker.price - price) * qty;
+           MarketSystem.refundAssets(state, taker, excess / taker.price, context); 
+      }
+  }
+
+  private static deductTax(state: GameState, entityId: string, type: string, amount: number, context?: GameContext) {
+      if (amount <= 0) return;
+      if (type === 'RESIDENT') {
+          const r = context?.residentMap.get(entityId) || state.population.residents.find(x => x.id === entityId);
+          if (r && r.cash >= amount) {
+              r.cash -= amount;
+              state.cityTreasury.cash += amount;
+              state.cityTreasury.dailyIncome += amount;
+          }
+      } else if (type === 'COMPANY') {
+          const c = context?.companyMap.get(entityId) || state.companies.find(x => x.id === entityId);
+          if (c && c.cash >= amount) {
+              c.cash -= amount;
+              state.cityTreasury.cash += amount;
+              state.cityTreasury.dailyIncome += amount;
+          }
+      }
+  }
+
+  private static updateCandle(state: GameState, itemId: string, price: number, volume: number, context?: GameContext) {
+      let itemHistory: any[] = [];
+      if (Object.values(ResourceType).includes(itemId as ResourceType)) {
+          itemHistory = state.resources[itemId as ResourceType].history;
+          state.resources[itemId as ResourceType].currentPrice = price;
+          state.resources[itemId as ResourceType].dailySales += volume;
+      } else if (Object.values(ProductType).includes(itemId as ProductType)) {
+          itemHistory = state.products[itemId as ProductType].history;
+          state.products[itemId as ProductType].marketPrice = price;
+          state.products[itemId as ProductType].dailySales += volume;
+      } else {
+          const comp = context?.companyMap.get(itemId) || state.companies.find(c => c.id === itemId);
+          if (comp) {
+              itemHistory = comp.history;
+              comp.sharePrice = price;
+              comp.monthlySalesVolume += volume;
+          }
+      }
+
+      if (itemHistory && itemHistory.length > 0) {
+        const lastCandle = itemHistory[itemHistory.length - 1];
+        if (lastCandle.day === state.day) {
+            lastCandle.close = price;
+            lastCandle.high = Math.max(lastCandle.high, price);
+            lastCandle.low = Math.min(lastCandle.low, price);
+            lastCandle.volume += volume;
+        } else {
+            itemHistory.push({
+                day: state.day,
+                open: price,
+                close: price,
+                high: price,
+                low: price,
+                volume: volume
+            });
+            if (itemHistory.length > 60) itemHistory.shift();
+        }
+      }
+  }
+}
+
+function orderIsTreasury(o: Order) {
+    return o.ownerType === 'TREASURY';
 }

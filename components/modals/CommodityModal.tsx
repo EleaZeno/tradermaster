@@ -1,10 +1,9 @@
-
 import React from 'react';
-import { ResourceItem, ProductItem, Candle } from '../../types';
-import { Card } from '../Card';
-import { Button } from '../Button';
-import { KLineChart } from '../charts/KLineChart';
+import { ResourceItem, ProductItem, Candle } from '../../shared/types';
+import { Card, Button } from '../../shared/components';
+import { KLineChart } from '../../shared/components/charts/KLineChart';
 import { X, TrendingUp, ShoppingCart } from 'lucide-react';
+import { useGameStore } from '../../shared/store/useGameStore';
 
 interface CommodityModalProps {
   item: ResourceItem | ProductItem;
@@ -14,6 +13,10 @@ interface CommodityModalProps {
 }
 
 export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onClose, onTrade }) => {
+  const gameState = useGameStore(s => s.gameState);
+  const book = gameState.market[item.id];
+  const marketDepth = book ? book.asks.reduce((acc, order) => acc + (order.amount - order.filled), 0) : 0;
+
   const currentPrice = item.history.length > 0 ? item.history[item.history.length - 1].close : 0;
   const openPrice = item.history.length > 0 ? item.history[item.history.length - 1].open : 0;
   const change = ((currentPrice - openPrice) / openPrice) * 100;
@@ -59,7 +62,7 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
               <div className="flex flex-col justify-center text-xs text-stone-500 px-2">
                  <div className="flex justify-between mb-1">
                     <span>Market Depth</span>
-                    <span className="text-stone-300">{Math.floor(item.marketInventory)} units</span>
+                    <span className="text-stone-300">{Math.floor(marketDepth)} units</span>
                  </div>
                  <div className="flex justify-between">
                     <span>Your Balance</span>

@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { ResourceType, ResourceItem, ProductType, ProductItem } from '../../types';
-import { RESOURCE_ICONS } from '../../constants';
+import { RESOURCE_ICONS } from '../../shared/assets';
 import { Card } from '../Card';
 import { Button } from '../Button';
 

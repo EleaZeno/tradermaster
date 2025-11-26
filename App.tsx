@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
-  Wheat, Building2, BarChart3, Landmark, Plus, Settings, AlertTriangle 
+  Wheat, Building2, BarChart3, Landmark, Plus, Settings, AlertTriangle, Briefcase 
 } from 'lucide-react';
 import { useGameStore } from './shared/store/useGameStore';
 import { useGameLoop } from './shared/hooks/useGameLoop';
@@ -11,6 +12,7 @@ import { CommoditiesTab } from './features/commodities/CommoditiesTab';
 import { CompaniesTab } from './features/companies/CompaniesTab';
 import { StatsTab } from './features/stats/StatsTab';
 import { CityHallTab } from './features/cityhall/CityHallTab';
+import { BankingTab } from './features/banking/BankingTab';
 import { ChatWidget } from './components/ChatWidget';
 import { CompanyModal } from './features/companies/CompanyModal';
 import { CreateCompanyModal } from './features/companies/CreateCompanyModal';
@@ -41,7 +43,7 @@ const App: React.FC = () => {
   const sellStock = useGameStore(s => s.sellStock);
   const setLivingStandard = useGameStore(s => s.setLivingStandard);
 
-  const [activeTab, setActiveTab] = useState<'commodities' | 'companies' | 'stats' | 'cityhall'>('commodities');
+  const [activeTab, setActiveTab] = useState<'commodities' | 'companies' | 'stats' | 'cityhall' | 'banking'>('commodities');
   const [showCreateCompany, setShowCreateCompany] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
@@ -105,10 +107,11 @@ const App: React.FC = () => {
 
             <Card className="bg-stone-900 border-stone-800" title="市场导航">
               <div className="space-y-1">
-                <Button className="w-full justify-start" variant={activeTab === 'commodities' ? 'primary' : 'secondary'} onClick={() => setActiveTab('commodities')}><Wheat size={16}/> 商品交易 (期货)</Button>
-                <Button className="w-full justify-start" variant={activeTab === 'companies' ? 'primary' : 'secondary'} onClick={() => setActiveTab('companies')}><Building2 size={16}/> 股票与基金</Button>
+                <Button className="w-full justify-start" variant={activeTab === 'commodities' ? 'primary' : 'secondary'} onClick={() => setActiveTab('commodities')}><Wheat size={16}/> 商品现货 & LOB</Button>
+                <Button className="w-full justify-start" variant={activeTab === 'companies' ? 'primary' : 'secondary'} onClick={() => setActiveTab('companies')}><Building2 size={16}/> 股票交易所</Button>
+                <Button className="w-full justify-start" variant={activeTab === 'banking' ? 'primary' : 'secondary'} onClick={() => setActiveTab('banking')}><Briefcase size={16}/> 央行与信贷</Button>
                 <Button className="w-full justify-start" variant={activeTab === 'stats' ? 'primary' : 'secondary'} onClick={() => setActiveTab('stats')}><BarChart3 size={16}/> 宏观数据</Button>
-                <Button className="w-full justify-start" variant={activeTab === 'cityhall' ? 'primary' : 'secondary'} onClick={() => setActiveTab('cityhall')}><Landmark size={16}/> 市政厅与选举</Button>
+                <Button className="w-full justify-start" variant={activeTab === 'cityhall' ? 'primary' : 'secondary'} onClick={() => setActiveTab('cityhall')}><Landmark size={16}/> 市政厅与人口</Button>
               </div>
             </Card>
 
@@ -141,30 +144,6 @@ const App: React.FC = () => {
                   ))}
                </div>
             </Card>
-            
-             <Card className="bg-stone-900 border-stone-800" title="AI 分析概览 (God Mode)">
-                <div className="space-y-3 text-xs">
-                    <div className="flex justify-between border-b border-stone-800 pb-2">
-                        <span className="text-stone-500">基尼系数 (不平等)</span>
-                        <span className={`font-mono font-bold ${godModeData.affordabilityIndex > 0.4 ? 'text-red-500' : 'text-emerald-500'}`}>
-                            {godModeData.affordabilityIndex}
-                        </span>
-                    </div>
-                    <div className="flex justify-between border-b border-stone-800 pb-2">
-                        <span className="text-stone-500">最赚钱行业</span>
-                        <span className="text-amber-400">{godModeData.mostProfitableIndustry}</span>
-                    </div>
-                    <div>
-                        <span className="text-stone-500 block mb-1">供需缺口 (Demand Gap)</span>
-                         {Object.entries(godModeData.supplyDemandGap).map(([k, v]) => (
-                             <div key={k} className="flex justify-between pl-2">
-                                 <span>{k}</span>
-                                 <span className={v > 0 ? 'text-red-400' : 'text-emerald-400'}>{v > 0 ? `缺 ${v.toFixed(1)}` : '过剩'}</span>
-                             </div>
-                         ))}
-                    </div>
-                </div>
-            </Card>
          </div>
 
          <div className="lg:col-span-9 space-y-6">
@@ -192,6 +171,10 @@ const App: React.FC = () => {
                 onCover={() => {}}
                 onSelectCompany={setSelectedCompanyId}
               />
+            )}
+
+            {activeTab === 'banking' && (
+              <BankingTab bank={gameState.bank} />
             )}
 
             {activeTab === 'stats' && (
