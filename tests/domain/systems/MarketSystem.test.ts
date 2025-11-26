@@ -1,4 +1,5 @@
 
+
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MarketSystem } from '../../../domain/systems/MarketSystem';
 import { INITIAL_POPULATION, INITIAL_CITY_TREASURY, INITIAL_COMPANIES, INITIAL_RESOURCES, INITIAL_PRODUCTS } from '../../../shared/initialState';
@@ -15,7 +16,11 @@ const createMockState = (): GameState => ({
     cash: 100,
     mayorId: 'res_mayor',
     cityTreasury: { ...INITIAL_CITY_TREASURY, cash: 1000 },
-    bank: { reserves: 1000, totalDeposits: 0, totalLoans: 0, depositRate: 0.001, loanRate: 0.003, loans: [], deposits: [], history: [] },
+    bank: { 
+        reserves: 1000, totalDeposits: 0, totalLoans: 0, depositRate: 0.001, loanRate: 0.003, 
+        targetInflation: 0.02, targetUnemployment: 0.05,
+        loans: [], deposits: [], history: [] 
+    },
     election: { active: false, cycle: 1, nextDate: 10, candidates: [], winnerId: null },
     population: JSON.parse(JSON.stringify(INITIAL_POPULATION)),
     resources: JSON.parse(JSON.stringify(INITIAL_RESOURCES)),

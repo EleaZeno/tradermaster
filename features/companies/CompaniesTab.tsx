@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
 import { Company, ProductType, Fund } from '../../shared/types';
@@ -42,6 +43,7 @@ export const CompaniesTab: React.FC<CompaniesTabProps> = ({ companies, funds, ca
                         <div className="text-xs text-stone-500 mt-1 flex flex-col gap-0.5 font-mono">
                             <span>EPS: {lastReport?.eps || 0} oz</span>
                             <span>Vol: {comp.monthlySalesVolume}</span>
+                            <span title="Tobin's Q: Valuation Ratio">Q-Ratio: {comp.tobinQ?.toFixed(2) || '1.00'}</span>
                         </div>
                         </div>
                         <div className="text-right">

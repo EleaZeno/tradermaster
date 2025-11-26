@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { 
-  Wheat, Building2, BarChart3, Landmark, Plus, Settings, AlertTriangle, Briefcase 
+  Wheat, Building2, BarChart3, Landmark, Plus, Settings, AlertTriangle, Briefcase, Beaker 
 } from 'lucide-react';
 import { useGameStore } from './shared/store/useGameStore';
 import { useGameLoop } from './shared/hooks/useGameLoop';
@@ -13,6 +14,7 @@ import { CompaniesTab } from './features/companies/CompaniesTab';
 import { StatsTab } from './features/stats/StatsTab';
 import { CityHallTab } from './features/cityhall/CityHallTab';
 import { BankingTab } from './features/banking/BankingTab';
+import { ValidationTab } from './features/validation/ValidationTab';
 import { ChatWidget } from './components/ChatWidget';
 import { CompanyModal } from './features/companies/CompanyModal';
 import { CreateCompanyModal } from './features/companies/CreateCompanyModal';
@@ -43,7 +45,7 @@ const App: React.FC = () => {
   const sellStock = useGameStore(s => s.sellStock);
   const setLivingStandard = useGameStore(s => s.setLivingStandard);
 
-  const [activeTab, setActiveTab] = useState<'commodities' | 'companies' | 'stats' | 'cityhall' | 'banking'>('commodities');
+  const [activeTab, setActiveTab] = useState<'commodities' | 'companies' | 'stats' | 'cityhall' | 'banking' | 'validation'>('commodities');
   const [showCreateCompany, setShowCreateCompany] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
@@ -112,6 +114,9 @@ const App: React.FC = () => {
                 <Button className="w-full justify-start" variant={activeTab === 'banking' ? 'primary' : 'secondary'} onClick={() => setActiveTab('banking')}><Briefcase size={16}/> 央行与信贷</Button>
                 <Button className="w-full justify-start" variant={activeTab === 'stats' ? 'primary' : 'secondary'} onClick={() => setActiveTab('stats')}><BarChart3 size={16}/> 宏观数据</Button>
                 <Button className="w-full justify-start" variant={activeTab === 'cityhall' ? 'primary' : 'secondary'} onClick={() => setActiveTab('cityhall')}><Landmark size={16}/> 市政厅与人口</Button>
+                <div className="pt-2 mt-2 border-t border-stone-700">
+                    <Button className="w-full justify-start" variant={activeTab === 'validation' ? 'primary' : 'secondary'} onClick={() => setActiveTab('validation')}><Beaker size={16} className="text-indigo-400"/> 经济校准实验室</Button>
+                </div>
               </div>
             </Card>
 
@@ -183,6 +188,10 @@ const App: React.FC = () => {
 
             {activeTab === 'cityhall' && (
               <CityHallTab gameState={gameState} companies={gameState.companies} />
+            )}
+
+            {activeTab === 'validation' && (
+              <ValidationTab gameState={gameState} />
             )}
          </div>
       </main>

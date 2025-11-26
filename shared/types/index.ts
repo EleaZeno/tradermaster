@@ -1,4 +1,5 @@
 
+
 import { ReactNode } from 'react';
 
 export enum ResourceType {
@@ -93,9 +94,11 @@ export interface Bank {
   totalLoans: number;
   depositRate: number; // Daily
   loanRate: number;    // Daily
+  targetInflation: number; // Annualized target (e.g., 0.02)
+  targetUnemployment: number; // Target rate (e.g., 0.05)
   loans: Loan[];
   deposits: Deposit[];
-  history: { day: number; reserves: number; rates: number }[];
+  history: { day: number; reserves: number; rates: number; inflation: number }[];
 }
 
 export interface Resident {
@@ -192,6 +195,7 @@ export interface Company {
   executiveSalary: number; 
   dividendRate: number;
   margin: number; 
+  tobinQ: number; // Valuation metric: Market Cap / Replacement Cost
   aiPersonality: 'AGGRESSIVE' | 'CONSERVATIVE' | 'BALANCED';
   boardMembers: string[]; 
   unionTension: number; 
@@ -346,6 +350,16 @@ export interface OrderBook {
     history: Trade[];
 }
 
+export interface MacroMetric {
+  day: number;
+  gdp: number;         // Nominal GDP estimate
+  consumption: number; // Total consumption Value
+  investment: number;  // Est investment
+  cpi: number;         // Consumer Price Index
+  inflation: number;   // Daily inflation rate
+  unemployment: number;// Unemployment rate (0-1)
+}
+
 export interface GameState {
   cash: number; 
   day: number;
@@ -361,7 +375,7 @@ export interface GameState {
   futures: FuturesPosition[];
   events: MarketEvent[];
   netWorthHistory: { day: number; value: number }[];
-  macroHistory: { day: number; gdp: number; cpi: number }[];
+  macroHistory: MacroMetric[]; // Updated to track stylized facts data
   chatHistory: ChatMessage[];
   logs: string[];
   economicOverview: EconomicSnapshot; 

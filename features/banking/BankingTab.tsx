@@ -1,15 +1,24 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Bank } from '../../shared/types';
-import { Card } from '../../shared/components';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
-import { Building2, TrendingUp, PiggyBank, DollarSign } from 'lucide-react';
+import { useGameStore } from '../../shared/store/useGameStore';
+import { Card, Button } from '../../shared/components';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Line, ComposedChart } from 'recharts';
+import { Building2, TrendingUp, DollarSign, Settings2 } from 'lucide-react';
 
 interface BankingTabProps {
   bank: Bank;
 }
 
 export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
+  const [targetInflation, setTargetInflation] = useState(bank.targetInflation);
+  const [targetUnemployment, setTargetUnemployment] = useState(bank.targetUnemployment);
+  const updateBank = useGameStore(s => s.updateBank);
+
+  const handleApply = () => {
+      updateBank({ targetInflation, targetUnemployment });
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -25,22 +34,28 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                 </div>
             </Card>
 
-            <Card className="bg-stone-900 border-stone-800" title="信贷市场利率">
-                <div className="flex items-center gap-4">
-                    <div className="p-3 bg-blue-900/30 rounded-full border border-blue-700">
-                        <TrendingUp size={24} className="text-blue-500" />
-                    </div>
-                    <div>
-                         <div className="flex justify-between w-48 mb-1">
-                             <span className="text-xs text-stone-500">Deposit Rate</span>
-                             <span className="font-mono text-emerald-400">{(bank.depositRate * 100).toFixed(2)}%</span>
-                         </div>
-                         <div className="flex justify-between w-48">
-                             <span className="text-xs text-stone-500">Loan Rate</span>
-                             <span className="font-mono text-red-400">{(bank.loanRate * 100).toFixed(2)}%</span>
-                         </div>
-                    </div>
-                </div>
+            <Card className="bg-stone-900 border-stone-800" title="货币政策驾驶舱 (Taylor Rule)">
+                 <div className="space-y-2">
+                     <div className="flex justify-between items-center text-xs">
+                         <label className="text-stone-400">Target Inflation (Annual)</label>
+                         <input 
+                            type="number" step="0.01" 
+                            className="w-16 bg-stone-950 border border-stone-700 rounded px-1 text-right text-white"
+                            value={targetInflation}
+                            onChange={(e) => setTargetInflation(parseFloat(e.target.value))}
+                         />
+                     </div>
+                     <div className="flex justify-between items-center text-xs">
+                         <label className="text-stone-400">Target Unemployment</label>
+                         <input 
+                            type="number" step="0.01" 
+                            className="w-16 bg-stone-950 border border-stone-700 rounded px-1 text-right text-white"
+                            value={targetUnemployment}
+                            onChange={(e) => setTargetUnemployment(parseFloat(e.target.value))}
+                         />
+                     </div>
+                     <Button size="sm" className="w-full mt-1" onClick={handleApply}>Update Targets</Button>
+                 </div>
             </Card>
 
             <Card className="bg-stone-900 border-stone-800" title="系统杠杆">
@@ -56,23 +71,26 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
             </Card>
         </div>
 
-        <Card title="信贷周期趋势" className="bg-stone-900 border-stone-800 h-80">
+        <Card title="宏观调控数据 (Rates & Inflation)" className="bg-stone-900 border-stone-800 h-80">
             <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={bank.history}>
+                <ComposedChart data={bank.history}>
                     <defs>
                         <linearGradient id="colorReserves" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
                             <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                         </linearGradient>
                     </defs>
                     <XAxis dataKey="day" stroke="#444" tick={{fontSize: 10}} />
-                    <YAxis stroke="#444" tick={{fontSize: 10}} />
+                    <YAxis yAxisId="left" stroke="#444" tick={{fontSize: 10}} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#444" tick={{fontSize: 10}} domain={['auto', 'auto']} />
                     <Tooltip 
                         contentStyle={{backgroundColor: '#1c1917', border: '1px solid #444', fontSize: '12px'}}
                         labelStyle={{color: '#9ca3af'}}
                     />
-                    <Area type="monotone" dataKey="reserves" stroke="#10b981" fillOpacity={1} fill="url(#colorReserves)" />
-                </AreaChart>
+                    <Area yAxisId="left" type="monotone" dataKey="reserves" stroke="#10b981" fillOpacity={1} fill="url(#colorReserves)" name="Reserves" />
+                    <Line yAxisId="right" type="monotone" dataKey="rates" stroke="#f59e0b" dot={false} strokeWidth={2} name="Interest Rate" />
+                    <Line yAxisId="right" type="monotone" dataKey="inflation" stroke="#ef4444" dot={false} strokeWidth={2} name="Inflation (W)" />
+                </ComposedChart>
             </ResponsiveContainer>
         </Card>
 

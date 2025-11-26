@@ -6,6 +6,9 @@ export class BankingSystem {
     static process(state: GameState, context: GameContext): void {
         const bank = state.bank;
         
+        // 0. Monetary Policy (Taylor Rule)
+        BankingSystem.applyMonetaryPolicy(state, bank);
+
         // 1. Accrue Interest
         BankingSystem.processInterest(state, bank, context);
 
@@ -16,12 +19,56 @@ export class BankingSystem {
         BankingSystem.processLoans(state, bank, context);
 
         // 4. Record History
+        const lastCpi = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].cpi : 0;
+        const prevCpi = state.macroHistory.length > 1 ? state.macroHistory[state.macroHistory.length - 2].cpi : lastCpi;
+        const inflation = prevCpi > 0 ? (lastCpi - prevCpi) / prevCpi : 0;
+
         bank.history.push({ 
             day: state.day, 
             reserves: bank.reserves, 
-            rates: bank.loanRate 
+            rates: bank.loanRate,
+            inflation: inflation
         });
         if (bank.history.length > 30) bank.history.shift();
+    }
+
+    private static applyMonetaryPolicy(state: GameState, bank: Bank) {
+        // Calculate Inflation
+        const history = state.macroHistory;
+        let currentInflation = 0;
+        if (history.length > 7) {
+            const now = history[history.length - 1].cpi;
+            const weekAgo = history[history.length - 8].cpi;
+            currentInflation = (now - weekAgo) / weekAgo; // Weekly inflation roughly
+        }
+
+        // Calculate Unemployment
+        const unemployed = state.population.residents.filter(r => r.job === 'UNEMPLOYED' || (r.job === 'FARMER' && !r.employerId)).length;
+        const totalLaborForce = state.population.total; // Simplification
+        const currentUnemployment = unemployed / totalLaborForce;
+
+        // Taylor Rule: i = pi + r* + 0.5(pi - pi*) + 0.5(y - y*)
+        // Where y gap is approximated by (u* - u) via Okun's Law
+        
+        const pi = currentInflation;
+        const piStar = bank.targetInflation / 52; // Weekly target approx (annual / 52)
+        const rStar = 0.001; // Daily equilibrium real rate (approx 3% annual)
+        const u = currentUnemployment;
+        const uStar = bank.targetUnemployment;
+
+        // Coefficients
+        const alphaPi = 0.5;
+        const alphaY = 0.5;
+
+        // Note: Unemployment gap (u* - u) is positive when economy is overheating (u < u*), justifying higher rates
+        const targetRate = pi + rStar + alphaPi * (pi - piStar) + alphaY * (uStar - u);
+
+        // Smoothing
+        const smoothing = 0.1;
+        const nextRate = bank.loanRate * (1 - smoothing) + targetRate * smoothing;
+
+        bank.loanRate = Math.max(0.0001, Math.min(0.05, nextRate)); // Clamp between 0.01% and 5% daily
+        bank.depositRate = Math.max(0, bank.loanRate - 0.001); // Spread
     }
 
     private static processInterest(state: GameState, bank: Bank, context: GameContext) {
@@ -35,9 +82,6 @@ export class BankingSystem {
         bank.deposits.forEach(deposit => {
             const interest = deposit.amount * deposit.interestRate;
             deposit.amount += interest;
-            // Bank owes this, theoretically keeps it in its own ledger until withdrawal
-            // For simulation simplicity, we don't deduct bank reserves immediately,
-            // but effectively bank liabilities increase. 
         });
     }
 

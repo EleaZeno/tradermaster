@@ -1,5 +1,5 @@
 
-import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank } from '../types';
+import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank } from './types';
 import { GAME_CONFIG } from './config';
 
 const generateResidents = (count: number): Resident[] => {
@@ -207,6 +207,8 @@ export const INITIAL_BANK: Bank = {
   totalLoans: 0,
   depositRate: 0.001, // 0.1% daily
   loanRate: 0.003,    // 0.3% daily
+  targetInflation: 0.02, 
+  targetUnemployment: 0.05,
   loans: [],
   deposits: [],
   history: []
@@ -269,6 +271,7 @@ export const INITIAL_COMPANIES: Company[] = [
     inventory: { raw: {}, finished: { [ResourceType.GRAIN]: 80 } }, 
     landTokens: 10, 
     avgCost: 0.5,
+    tobinQ: 1.0,
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.05, 20),
     type: CompanyType.COOPERATIVE, wageStructure: WageStructure.FLAT, ceoId: 'res_ceo_grain', isBankrupt: false
@@ -293,6 +296,7 @@ export const INITIAL_COMPANIES: Company[] = [
     inventory: { raw: { [ResourceType.GRAIN]: 100 }, finished: { [ProductType.BREAD]: 20 } }, 
     landTokens: 0, 
     avgCost: 1.2,
+    tobinQ: 1.0,
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.1, 20),
     type: CompanyType.CORPORATION, wageStructure: WageStructure.HIERARCHICAL, ceoId: 'res_ceo_food', isBankrupt: false
@@ -329,7 +333,7 @@ export const INITIAL_STATE: GameState = {
     events: [],
     netWorthHistory: [{ day: 1, value: GAME_CONFIG.INITIAL_PLAYER_CASH }],
     macroHistory: [],
-    chatHistory: [{ role: 'model', text: '微型社会模拟 v6.0 (Chaos Mode) 已启动。\n系统已接入 Limit Order Book, Cobb-Douglas 生产函数与央行系统。', timestamp: Date.now() }],
+    chatHistory: [{ role: 'model', text: '微型社会模拟 v6.0 (Chaos Mode) 已启动。\n系统已接入 Limit Order Book, Cobb-Douglas 生产函数与 Taylor Rule 央行系统。', timestamp: Date.now() }],
     logs: ["🏗️ 系统初始化完成"],
     economicOverview: {
         totalResidentCash: 0, totalCorporateCash: 0, totalFundCash: 0, totalCityCash: 0, totalSystemGold: 0,

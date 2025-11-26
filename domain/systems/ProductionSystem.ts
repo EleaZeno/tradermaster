@@ -1,5 +1,5 @@
 
-import { GameState, ResourceType, ProductType, IndustryType, FlowStats, GameContext } from '../../shared/types';
+import { GameState, ResourceType, ProductType, IndustryType, FlowStats, GameContext, Company } from '../../shared/types';
 import { MarketSystem } from './MarketSystem';
 import { Transaction } from '../utils/Transaction';
 
@@ -9,6 +9,44 @@ export class ProductionSystem {
     ProductionSystem.processFarming(gameState, context, flowStats, getEventModifier);
     ProductionSystem.processManufacturing(gameState, context, flowStats, getEventModifier);
     ProductionSystem.manageSales(gameState, context);
+    ProductionSystem.processCapitalAllocation(gameState, context);
+  }
+
+  private static processCapitalAllocation(state: GameState, context: GameContext): void {
+      state.companies.forEach(company => {
+          if (company.isBankrupt || company.isPlayerFounded) return;
+
+          // Calculate Tobin's Q
+          // Q = Market Value / Replacement Cost
+          const marketCap = company.sharePrice * company.totalShares;
+          
+          let inventoryValue = 0;
+          Object.entries(company.inventory.raw).forEach(([k, v]) => {
+             const price = state.resources[k as ResourceType]?.currentPrice || 1;
+             inventoryValue += (v || 0) * price;
+          });
+          Object.entries(company.inventory.finished).forEach(([k, v]) => {
+              // Est price
+              inventoryValue += (v || 0) * 2; 
+          });
+
+          const replacementCost = company.cash + inventoryValue + (company.productionLines.length * 100) + (company.landTokens || 0) * 50;
+          
+          const q = marketCap / (replacementCost || 1);
+          company.tobinQ = parseFloat(q.toFixed(2));
+
+          // Investment Rule
+          // If Q > 1.2, Market values firm more than its assets -> Expand
+          if (q > 1.2 && company.cash > 200) {
+              const lineType = company.productionLines[0].type;
+              company.cash -= 100;
+              company.productionLines.push({ type: lineType, isActive: true, efficiency: 0.9, allocation: 0 });
+              // Rebalance allocation
+              const count = company.productionLines.length;
+              company.productionLines.forEach(l => l.allocation = 1 / count);
+              state.logs.unshift(`🏭 ${company.name} 扩建生产线 (Tobin's Q: ${q.toFixed(2)})`);
+          }
+      });
   }
 
   private static manageSales(state: GameState, context: GameContext): void {

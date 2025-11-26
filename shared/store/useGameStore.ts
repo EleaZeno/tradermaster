@@ -1,7 +1,7 @@
 
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { GameState, Company, ResourceType, ProductType, IndustryType, Resident, FuturesContract, MarketEvent, OrderBook } from '../types';
+import { GameState, Company, ResourceType, ProductType, IndustryType, Resident, FuturesContract, MarketEvent, OrderBook, Bank } from '../types';
 import { INITIAL_POPULATION, INITIAL_CITY_TREASURY, INITIAL_ELECTION, INITIAL_RESOURCES, INITIAL_PRODUCTS, INITIAL_COMPANIES, INITIAL_FUNDS, INITIAL_STATE } from '../initialState';
 import { GAME_CONFIG } from '../config';
 import { processGameTick } from '../../domain/gameLogic';
@@ -25,6 +25,7 @@ interface GameStore {
   trade: (action: 'buy' | 'sell', itemId: IndustryType) => void;
   createCompany: (name: string, type: IndustryType) => void;
   updateCompany: (id: string, updates: Partial<Company>) => void;
+  updateBank: (updates: Partial<Bank>) => void;
   buyStock: (id: string, isFund?: boolean) => void;
   sellStock: (id: string, isFund?: boolean) => void;
   shortStock: (id: string, isFund?: boolean) => void;
@@ -69,10 +70,6 @@ export const useGameStore = create<GameStore>()(
           if (!playerRes) return;
 
           const isRes = Object.values(ResourceType).includes(itemId as ResourceType);
-          const price = isRes 
-            ? state.gameState.resources[itemId as ResourceType].currentPrice 
-            : state.gameState.products[itemId as ProductType].marketPrice;
-            
           let amount = isRes ? 10 : 1; 
 
           // Player trading is now Order Driven
@@ -81,7 +78,7 @@ export const useGameStore = create<GameStore>()(
               ownerType: 'RESIDENT',
               itemId: itemId,
               side: action === 'buy' ? 'BUY' : 'SELL',
-              type: 'MARKET', // Player executes at Market for simplicity in this function
+              type: 'MARKET', 
               price: 0,
               amount: amount
           });
@@ -114,10 +111,10 @@ export const useGameStore = create<GameStore>()(
                 // @ts-ignore
                 type: 'CORPORATION', wageStructure: 'PERFORMANCE', ceoId: 'res_player', isBankrupt: false, landTokens: 0,
                 avgCost: 0, accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0,
-                lastRevenue: 0, lastProfit: 0, monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: []
+                lastRevenue: 0, lastProfit: 0, monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: [],
+                tobinQ: 1.0
             });
             
-            // Initialize Order Book for new company
             state.gameState.market[newId] = { bids: [], asks: [], lastPrice: 1.0, history: [] };
             
             state.gameState.logs.unshift(`🎉 ${name} 上市成功！`);
@@ -127,6 +124,10 @@ export const useGameStore = create<GameStore>()(
     updateCompany: (id, updates) => set((state) => {
         const comp = state.gameState.companies.find(c => c.id === id);
         if (comp) Object.assign(comp, updates);
+    }),
+
+    updateBank: (updates) => set((state) => {
+        Object.assign(state.gameState.bank, updates);
     }),
 
     buyStock: (id, isFund) => set((state) => {
@@ -141,15 +142,9 @@ export const useGameStore = create<GameStore>()(
                 side: 'BUY',
                 type: 'MARKET',
                 price: 0,
-                amount: 100 // Buy 100 shares
+                amount: 100 
             });
             state.gameState.cash = player.cash;
-            
-            // Note: Ownership tracking is now handled in MarketSystem transfer logic
-            // We need to manually update ownedShares count for company? 
-            // The transfer logic updates `resident.portfolio`.
-            // It does NOT update `company.ownedShares` (which was 'shares owned by others'?).
-            // In LOB, shares are conserved. 
         }
     }),
 
@@ -164,7 +159,7 @@ export const useGameStore = create<GameStore>()(
             side: 'SELL',
             type: 'MARKET',
             price: 0,
-            amount: 100 // Sell 100 shares
+            amount: 100 
         });
         state.gameState.cash = player.cash;
     }),
