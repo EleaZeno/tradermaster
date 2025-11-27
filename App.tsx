@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useGameStore } from './shared/store/useGameStore';
 import { useGameLoop } from './shared/hooks/useGameLoop';
+import { usePerformanceMonitor } from './shared/hooks/usePerformanceMonitor';
 import { IndustryStat, IndustryType } from './shared/types';
 import { Button, Card } from './shared/components';
 import { Header } from './components/Header';
@@ -23,6 +24,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const App: React.FC = () => {
   useGameLoop();
+  usePerformanceMonitor();
 
   // Store Selectors
   const gameState = useGameStore(s => s.gameState);
@@ -196,8 +198,8 @@ const App: React.FC = () => {
                         cash={gameState.cash}
                         onBuy={(id, isFund) => buyStock(id, isFund)}
                         onSell={(id, isFund) => sellStock(id, isFund)}
-                        onShort={() => {}} 
-                        onCover={() => {}}
+                        onShort={(id, isFund) => sellStock(id, isFund)} 
+                        onCover={(id, isFund) => buyStock(id, isFund)}
                         onSelectCompany={setSelectedCompanyId}
                     />
                     )}

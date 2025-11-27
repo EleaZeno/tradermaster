@@ -12,6 +12,8 @@ import { MarketSystem } from './systems/MarketSystem';
  * Executes all sub-systems in order for a single game day.
  */
 export const processGameTick = (gameState: GameState): void => {
+    performance.mark('tick-start');
+
     resetDailyCounters(gameState);
     
     // --- OPTIMIZATION: Build Indices & Cache ---
@@ -81,6 +83,9 @@ export const processGameTick = (gameState: GameState): void => {
     // Finalize Turn
     updatePlayerStatus(gameState);
     gameState.day += 1;
+
+    performance.mark('tick-end');
+    performance.measure('game-tick', 'tick-start', 'tick-end');
 };
 
 const resetDailyCounters = (gameState: GameState): void => {

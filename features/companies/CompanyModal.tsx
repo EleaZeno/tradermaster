@@ -1,11 +1,13 @@
 
 import React, { useState } from 'react';
-import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart } from 'lucide-react';
+import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart, Bot, Sparkles } from 'lucide-react';
 import { Company, ProductType, ProductItem, ResourceType, IndustryType, ResourceItem } from '../../shared/types';
 import { Card, Button } from '../../shared/components';
 import { RESOURCE_ICONS } from '../../shared/assets';
 import { KLineChart } from '../../shared/components/charts/KLineChart';
 import { motion } from 'framer-motion';
+import { analyzeCompany } from '../../services/advisorService';
+import { useGameStore } from '../../shared/store/useGameStore';
 
 interface CompanyModalProps {
   company: Company;
@@ -22,9 +24,23 @@ interface CompanyModalProps {
 export const CompanyModal: React.FC<CompanyModalProps> = ({ 
   company, resources, onClose, onUpdate, onDividend
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'lines' | 'shareholders'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'lines' | 'shareholders' | 'ai'>('overview');
+  const [aiAnalysis, setAiAnalysis] = useState<string>("");
+  const [analyzing, setAnalyzing] = useState(false);
+  
+  const gameState = useGameStore(s => s.gameState);
+  const player = gameState.population.residents.find(r => r.isPlayer);
+  const ownedShares = player?.portfolio[company.id] || 0;
+  
   const grainPrice = resources[ResourceType.GRAIN].currentPrice;
   const wageMultiplier = company.wageMultiplier || 1.5;
+
+  const handleAnalysis = async () => {
+      setAnalyzing(true);
+      const text = await analyzeCompany(company, gameState);
+      setAiAnalysis(text);
+      setAnalyzing(false);
+  };
 
   return (
     <motion.div 
@@ -42,11 +58,12 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
         <Card className={`w-[800px] bg-stone-900 border-stone-700 max-h-[90vh] overflow-y-auto ${company.isBankrupt ? 'grayscale opacity-90' : ''}`} title={`公司控制台: ${company.name}`}>
           {company.isBankrupt && <div className="bg-red-900/80 text-white text-center p-2 mb-4 font-bold rounded">🚫 已破产</div>}
 
-          <div className="flex gap-2 mb-4 border-b border-stone-800 pb-2">
+          <div className="flex gap-2 mb-4 border-b border-stone-800 pb-2 overflow-x-auto">
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'overview' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('overview')}><Activity size={12}/> 经营概况</button>
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'chart' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('chart')}><BarChart size={12}/> 股价走势</button>
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'lines' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('lines')}><Briefcase size={12}/> 生产线</button>
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'shareholders' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('shareholders')}><Users size={12}/> 股东</button>
+            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'ai' ? 'bg-purple-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('ai')}><Sparkles size={12}/> AI 财报分析</button>
           </div>
 
           <div className="space-y-6">
@@ -65,6 +82,28 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                     <div className="h-[400px]">
                         <KLineChart data={company.history} height={400} />
                     </div>
+                </div>
+            )}
+
+            {activeTab === 'ai' && (
+                <div className="bg-stone-950 p-6 rounded border border-stone-800 min-h-[300px]">
+                    {!aiAnalysis ? (
+                        <div className="flex flex-col items-center justify-center h-full gap-4">
+                             <Bot size={48} className="text-stone-600"/>
+                             <p className="text-stone-400 text-sm">让 Alpha AI 深入分析该公司的财务状况、估值和潜在风险。</p>
+                             <Button onClick={handleAnalysis} disabled={analyzing}>
+                                 {analyzing ? "分析中..." : "生成 AI 研报"}
+                             </Button>
+                        </div>
+                    ) : (
+                        <div className="prose prose-invert prose-sm max-w-none">
+                            <div className="mb-4 flex justify-between items-center">
+                                <h3 className="text-emerald-400 font-bold flex items-center gap-2"><Sparkles size={16}/> Alpha 独家研报</h3>
+                                <Button size="sm" variant="secondary" onClick={() => setAiAnalysis("")}>重置</Button>
+                            </div>
+                            <div dangerouslySetInnerHTML={{ __html: (window as any).marked?.parse(aiAnalysis) }}></div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -189,8 +228,11 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                 </table>
             )}
 
-            <div className="pt-4 border-t border-stone-800">
-                <Button className="w-full" variant="secondary" onClick={onClose}>关闭</Button>
+            <div className="pt-4 border-t border-stone-800 flex justify-between items-center">
+                <div className="text-xs text-stone-500">
+                    你的持仓: <span className={ownedShares < 0 ? "text-red-400" : "text-white"}>{ownedShares}</span> 股
+                </div>
+                <Button variant="secondary" onClick={onClose}>关闭</Button>
             </div>
           </div>
         </Card>

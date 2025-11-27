@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { GameState, GodModeData, ResourceType, ProductType } from "../shared/types";
+import { GameState, GodModeData, ResourceType, ProductType, Company } from "../shared/types";
 
 const NEWS_EVENTS = [
     { headline: "遭遇旱灾", description: "由于持续的高温干旱，全谷的粮食产量预计将下降 30%。", impactType: "BAD", target: ResourceType.GRAIN, modifier: -0.3 },
@@ -11,7 +11,6 @@ const NEWS_EVENTS = [
 ];
 
 const getEconomicSummary = (gameState: GameState, godModeData: GodModeData) => {
-    // Helper to get total size from OrderBook Asks
     const getSupply = (itemId: string) => {
         const book = gameState.market[itemId];
         return book ? book.asks.reduce((s, o) => s + (o.amount - o.filled), 0) : 0;
@@ -82,6 +81,48 @@ export const getFinancialAdvisorResponse = async (
       return "系统离线：无法连接到 Gemini 神经网络。请确保 API KEY 配置正确。";
   }
 };
+
+export const analyzeCompany = async (company: Company, gameState: GameState): Promise<string> => {
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        // Prepare relevant data
+        const data = {
+            name: company.name,
+            price: company.sharePrice,
+            cash: company.cash,
+            employees: company.employees,
+            profit: company.lastProfit,
+            inventory: company.inventory,
+            tobinQ: company.tobinQ,
+            marketAvgWage: gameState.population.averageWage,
+            companyWage: company.wageOffer,
+            history: company.history.slice(-5) // Last 5 days
+        };
+
+        const prompt = `
+        You are a ruthless Wall Street Analyst. Analyze this company:
+        ${JSON.stringify(data)}
+
+        Provide a "Buy", "Hold", or "Sell" rating and 3 bullet points explaining why.
+        Focus on:
+        1. Liquidity (Cash)
+        2. Efficiency (Profit vs Wage)
+        3. Valuation (Tobin's Q)
+        
+        Respond in Chinese. Use Markdown.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+
+        return response.text || "数据不足，无法分析。";
+    } catch (error) {
+        return "分析服务暂时不可用。";
+    }
+}
 
 export const generateMarketEvent = async (currentDay: number): Promise<{headline: string, description: string, impactType: 'GOOD'|'BAD'|'NEUTRAL', turnCreated: number, effect?: any} | null> => {
     if (Math.random() > 0.1) return null;

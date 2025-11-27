@@ -306,7 +306,7 @@ export const INITIAL_COMPANIES: Company[] = [
 export const INITIAL_FUNDS: Fund[] = [];
 
 // Helper to create empty books
-const createEmptyBook = (price: number): OrderBook => ({
+export const createEmptyBook = (price: number): OrderBook => ({
     bids: [], asks: [], lastPrice: price, history: []
 });
 

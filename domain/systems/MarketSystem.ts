@@ -126,8 +126,19 @@ export class MarketSystem {
               resident.cash -= costToLock;
           } else {
               if (order.itemId.startsWith('comp_')) {
-                   if ((resident.portfolio[order.itemId] || 0) < itemToLock) return false;
-                   resident.portfolio[order.itemId] -= itemToLock;
+                   // SHORT SELLING LOGIC:
+                   // If player is selling and doesn't have enough shares, allow negative (Short)
+                   // But require some cash margin (simplification: no hard margin lock, but must have positive cash)
+                   const currentShares = resident.portfolio[order.itemId] || 0;
+                   
+                   if (resident.isPlayer) {
+                       // Player can short
+                       resident.portfolio[order.itemId] = currentShares - itemToLock;
+                   } else {
+                       // AI Residents cannot short (prevent bankruptcy loops)
+                       if (currentShares < itemToLock) return false;
+                       resident.portfolio[order.itemId] = currentShares - itemToLock;
+                   }
               } else {
                    if ((resident.inventory[order.itemId] || 0) < itemToLock) return false;
                    resident.inventory[order.itemId]! -= itemToLock;
@@ -162,16 +173,8 @@ export class MarketSystem {
           if (!resident) return;
 
           if (order.side === 'BUY') {
-              // For market orders, the price filed is 0, but we locked based on estimate. 
-              // This function needs to know how much cash was actually locked.
-              // Simplified: In this simulation, we handle "refund" of change during match execution.
-              // This function is mainly for CANCELLATIONS.
-              // For cancellation of Limit orders:
               if (order.type === 'LIMIT') {
                   resident.cash += order.price * amountToRefund;
-              } else {
-                  // Market order cancellation is tricky if price wasn't stored. 
-                  // Assuming Market Orders don't stay in book (they match or die), this path is rare.
               }
           } else {
               if (order.itemId.startsWith('comp_')) {
@@ -257,41 +260,22 @@ export class MarketSystem {
           opposingBook.splice(0, matchedCount);
       }
 
-      // Handle Remainder (Add to Book only if LIMIT)
+      // Handle Remainder
       if (itemsRemaining > 0.0001) {
           if (takerOrder.type === 'LIMIT') {
               const bookSide = isBuy ? book.bids : book.asks;
               const insertIndex = MarketSystem.getSortedIndex(bookSide, takerOrder.price, isBuy);
               bookSide.splice(insertIndex, 0, takerOrder);
           } else {
-              // Market Order Partial Fill / No Fill -> Refund remainder
-              // We need to estimate how much cash to refund based on the initial lock
-              // For simplicity, we refund the proportion of the initial lock that wasn't used.
-              // Note: Ideally we track `cashLocked` on the order object.
-              
-              // Simple Logic: Refund everything not spent. 
-              // Since we didn't track exact lock amount per order in this lightweight sim,
-              // we rely on the `refundAssets` heuristics or just accept slippage in simulation logic.
-              // Actually, for MARKET BUY, we locked `bestAsk * 1.5 * amount`.
-              // We should check what was spent.
-              // Since strict accounting is complex here, we skip explicit complex refund for Market orders 
-              // assuming the "ConsumerSystem" logic handles the wallet updates mostly correctly via transfers.
-              // *Correction*: ConsumerSystem relies on this to give money back if no trade happens!
-              
-              // Refund Logic for Market Order:
-              // We blindly refund the estimated lock cost for the remaining amount.
+              // Market Order Partial Fill / Refund logic
               const book = state.market[takerOrder.itemId];
               const bestAsk = book?.asks[0]?.price || takerOrder.price || 1.0; 
-              // Use the same multiplier as lockAssets
-              const refundCash = bestAsk * itemsRemaining * 1.5; 
               
               if (takerOrder.side === 'BUY') {
-                  // Only need to refund Cash for BUY
+                   const refundCash = bestAsk * itemsRemaining * 1.5; 
                    const r = context?.residentMap.get(takerOrder.ownerId) || state.population.residents.find(x => x.id === takerOrder.ownerId);
                    if (r) r.cash += refundCash;
-                   // Same for Company/Treasury...
               } else {
-                  // For SELL, we just give back the item
                   MarketSystem.refundAssets(state, takerOrder, itemsRemaining, context);
               }
           }
@@ -328,6 +312,7 @@ export class MarketSystem {
           const r = context?.residentMap.get(buyerId) || state.population.residents.find(x => x.id === buyerId);
           if (r) {
               if (taker.itemId.startsWith('comp_')) {
+                  // If covering a short position, this increases portfolio from negative towards zero
                   r.portfolio[taker.itemId] = (r.portfolio[taker.itemId] || 0) + qty;
               } else {
                   r.inventory[taker.itemId] = (r.inventory[taker.itemId] || 0) + qty;
@@ -357,18 +342,10 @@ export class MarketSystem {
       }
 
       // 4. Refund Excess Cash to Taker Buyer (Price Improvement)
-      // If LIMIT order buy at 10, matched at 8, refund 2.
-      // If MARKET order, we locked estimated amount, we handled refund in `matchOrder` remainder logic? 
-      // No, for the *matched* part, we need to refund the difference between *Locked Amount* and *Actual Cost*.
-      // Since we don't track per-order lock amount, this is the simulation inaccuracy source.
-      // Correct approach for sim:
       if (taker.side === 'BUY' && taker.type === 'LIMIT' && taker.price > price) {
            const excess = (taker.price - price) * qty;
-           MarketSystem.refundAssets(state, taker, excess / taker.price, context); // Approx hack: using refundAssets which multiplies by price. 
-           // Wait, refundAssets adds (amount * price). We want to add (cash).
-           // Manually refund cash:
-            const r = context?.residentMap.get(taker.ownerId) || state.population.residents.find(x => x.id === taker.ownerId);
-            if (r) r.cash += excess;
+           const r = context?.residentMap.get(taker.ownerId) || state.population.residents.find(x => x.id === taker.ownerId);
+           if (r) r.cash += excess;
       }
   }
 

@@ -3,6 +3,7 @@ import React from 'react';
 import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
 import { Company, ProductType, Fund } from '../../shared/types';
 import { Card, Button } from '../../shared/components';
+import { useGameStore } from '../../shared/store/useGameStore';
 
 interface CompaniesTabProps {
   companies: Company[];
@@ -17,6 +18,10 @@ interface CompaniesTabProps {
 }
 
 export const CompaniesTab: React.FC<CompaniesTabProps> = ({ companies, funds, cash, onBuy, onSell, onSelectCompany }) => {
+  const shortStock = useGameStore(s => s.shortStock);
+  const coverStock = useGameStore(s => s.coverStock);
+  const player = useGameStore(s => s.gameState.population.residents.find(r => r.isPlayer));
+
   return (
     <div className="space-y-8 animate-in fade-in">
       <div>
@@ -31,10 +36,16 @@ export const CompaniesTab: React.FC<CompaniesTabProps> = ({ companies, funds, ca
                 const change = ((comp.sharePrice - startPrice) / startPrice) * 100;
                 const isPositive = change >= 0;
                 const color = isPositive ? '#3b82f6' : '#ef4444'; // Blue or Red
+                
+                const owned = player?.portfolio[comp.id] || 0;
+                const isShort = owned < 0;
 
                 return (
                 <Card key={comp.id} className="bg-stone-900 border-stone-800 relative overflow-hidden group hover:border-stone-600 transition-colors cursor-pointer" onClick={() => onSelectCompany(comp.id)}>
                     {comp.isPlayerFounded && <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] px-2 py-1 rounded-bl">MY COMPANY</div>}
+                    
+                    {isShort && <div className="absolute top-0 right-0 bg-red-600 text-white text-[10px] px-2 py-1 rounded-bl font-bold">SHORT POS: {owned}</div>}
+
                     <div className="flex justify-between items-start mb-4 relative z-10">
                         <div>
                         <h3 className="font-bold text-lg text-stone-100 flex items-center gap-2">
@@ -77,8 +88,25 @@ export const CompaniesTab: React.FC<CompaniesTabProps> = ({ companies, funds, ca
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mt-4 relative z-10" onClick={e => e.stopPropagation()}>
-                        <Button className="flex-1" size="sm" onClick={() => onBuy(comp.id)} disabled={cash < comp.sharePrice * 100}>买入</Button>
-                        <Button className="flex-1" size="sm" variant="secondary" onClick={() => onSell(comp.id)} disabled={comp.ownedShares < 100}>卖出</Button>
+                        {isShort ? (
+                             <>
+                                <Button className="flex-1" size="sm" variant="success" onClick={() => coverStock(comp.id)}>
+                                    平仓 (Cover)
+                                </Button>
+                                <Button className="flex-1" size="sm" variant="danger" onClick={() => shortStock(comp.id)}>
+                                    加仓做空 (Add Short)
+                                </Button>
+                             </>
+                        ) : (
+                             <>
+                                <Button className="flex-1" size="sm" onClick={() => onBuy(comp.id)} disabled={cash < comp.sharePrice * 100}>买入</Button>
+                                {owned > 0 ? (
+                                    <Button className="flex-1" size="sm" variant="secondary" onClick={() => onSell(comp.id)}>卖出</Button>
+                                ) : (
+                                    <Button className="flex-1" size="sm" variant="danger" onClick={() => shortStock(comp.id)} title="卖出你没有的股票 (做空)">做空</Button>
+                                )}
+                             </>
+                        )}
                     </div>
                 </Card>
                 );
