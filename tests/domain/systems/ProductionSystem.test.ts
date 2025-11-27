@@ -33,7 +33,15 @@ const createMockState = (): GameState => ({
         [ProductType.BREAD]: createEmptyBook(2.0)
     },
     achievements: [],
-    notifications: []
+    notifications: [],
+    settings: {
+        language: 'zh',
+        notifications: {
+            trades: true,
+            achievements: true,
+            news: true
+        }
+    }
 });
 
 const createMockContext = (state: GameState): GameContext => {

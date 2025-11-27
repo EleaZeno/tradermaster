@@ -1,4 +1,5 @@
 
+
 import { ReactNode } from 'react';
 
 export enum ResourceType {
@@ -395,6 +396,15 @@ export interface Notification {
   timestamp: number;
 }
 
+export interface GameSettings {
+  language: 'zh' | 'en';
+  notifications: {
+    trades: boolean;
+    achievements: boolean;
+    news: boolean;
+  };
+}
+
 export interface GameState {
   cash: number; 
   day: number;
@@ -419,6 +429,7 @@ export interface GameState {
   // New features
   achievements: AchievementState[];
   notifications: Notification[];
+  settings: GameSettings;
 }
 
 export interface AgentAdvice {

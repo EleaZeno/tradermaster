@@ -1,4 +1,5 @@
 
+
 import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank } from './types';
 import { GAME_CONFIG } from './config';
 
@@ -344,5 +345,13 @@ export const INITIAL_STATE: GameState = {
     
     // New Features
     achievements: [],
-    notifications: []
+    notifications: [],
+    settings: {
+        language: 'zh',
+        notifications: {
+            trades: true,
+            achievements: true,
+            news: true
+        }
+    }
 };

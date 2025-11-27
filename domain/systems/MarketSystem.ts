@@ -1,4 +1,5 @@
 
+
 import { GameState, IndustryType, ResourceType, ProductType, Order, OrderSide, OrderType, Trade, OrderBook, GameContext } from '../../shared/types';
 import { GameError } from '../../shared/utils/errorHandler';
 
@@ -394,21 +395,36 @@ export class MarketSystem {
       }
 
       // 5. Notifications
-      if (taker.ownerType === 'RESIDENT' && taker.ownerId === 'res_player') {
-          state.notifications.push({
-              id: `ntf_${Date.now()}`,
-              message: `交易成功: ${taker.side === 'BUY' ? '买入' : '卖出'} ${qty.toFixed(0)} ${taker.itemId} @ ${price.toFixed(2)}`,
-              type: 'success',
-              timestamp: Date.now()
-          });
-      }
-      if (maker.ownerType === 'RESIDENT' && maker.ownerId === 'res_player') {
-           state.notifications.push({
-              id: `ntf_${Date.now()}_m`,
-              message: `订单成交: ${maker.side === 'BUY' ? '买入' : '卖出'} ${qty.toFixed(0)} ${maker.itemId} @ ${price.toFixed(2)}`,
-              type: 'success',
-              timestamp: Date.now()
-          });
+      // Respect settings and localization
+      if (state.settings.notifications.trades) {
+          const isEn = state.settings.language === 'en';
+          
+          if (taker.ownerType === 'RESIDENT' && taker.ownerId === 'res_player') {
+              const action = taker.side === 'BUY' ? (isEn ? 'Bought' : '买入') : (isEn ? 'Sold' : '卖出');
+              const msg = isEn 
+                ? `Trade Success: ${action} ${qty.toFixed(0)} ${taker.itemId} @ ${price.toFixed(2)}`
+                : `交易成功: ${action} ${qty.toFixed(0)} ${taker.itemId} @ ${price.toFixed(2)}`;
+                
+              state.notifications.push({
+                  id: `ntf_${Date.now()}`,
+                  message: msg,
+                  type: 'success',
+                  timestamp: Date.now()
+              });
+          }
+          if (maker.ownerType === 'RESIDENT' && maker.ownerId === 'res_player') {
+               const action = maker.side === 'BUY' ? (isEn ? 'Bought' : '买入') : (isEn ? 'Sold' : '卖出');
+               const msg = isEn
+                ? `Order Filled: ${action} ${qty.toFixed(0)} ${maker.itemId} @ ${price.toFixed(2)}`
+                : `订单成交: ${action} ${qty.toFixed(0)} ${maker.itemId} @ ${price.toFixed(2)}`;
+
+               state.notifications.push({
+                  id: `ntf_${Date.now()}_m`,
+                  message: msg,
+                  type: 'success',
+                  timestamp: Date.now()
+              });
+          }
       }
   }
 

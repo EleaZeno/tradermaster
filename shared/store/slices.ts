@@ -1,6 +1,7 @@
 
+
 import { StateCreator } from 'zustand';
-import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank } from '../types';
+import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings } from '../types';
 import { INITIAL_STATE } from '../initialState';
 import { processGameTick } from '../../domain/gameLogic';
 import { MarketSystem } from '../../domain/systems/MarketSystem';
@@ -19,6 +20,8 @@ export interface GameSlice {
   addEvent: (event: MarketEvent) => void;
   updateChatHistory: (history: any[]) => void;
   dismissNotification: (id: string) => void;
+  clearNotifications: () => void;
+  updateSettings: (settings: Partial<GameSettings> | Partial<GameSettings['notifications']>) => void;
 }
 
 export interface PlayerSlice {
@@ -59,19 +62,41 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
     processGameTick(state.gameState);
     if (state.gameState.logs.length > 50) state.gameState.logs = state.gameState.logs.slice(0, 50);
 
+    // Notification Cleanup (User Request): 
+    // 1. Remove notifications older than 5 seconds (Auto-dismiss)
+    // 2. Cap limit to 4 to prevent flooding
+    const now = Date.now();
+    state.gameState.notifications = state.gameState.notifications.filter(n => now - n.timestamp < 5000);
+    
+    if (state.gameState.notifications.length > 4) {
+         // Keep the 4 newest (slice from end)
+         state.gameState.notifications = state.gameState.notifications.slice(-4);
+    }
+
     // Check Achievements
     const newUnlocked = checkAchievements(state.gameState);
-    newUnlocked.forEach(id => {
-        state.gameState.achievements.push({ id, unlockedAt: Date.now() });
-        const meta = ACHIEVEMENTS.find(a => a.id === id);
-        state.gameState.notifications.push({
-            id: `ach_${Date.now()}_${id}`,
-            message: `🏆 解锁成就: ${meta?.name || id} - ${meta?.description}`,
-            type: 'success',
-            timestamp: Date.now()
+    if (newUnlocked.length > 0) {
+        newUnlocked.forEach(id => {
+            state.gameState.achievements.push({ id, unlockedAt: Date.now() });
+            const meta = ACHIEVEMENTS.find(a => a.id === id);
+            
+            // Respect Settings
+            if (state.gameState.settings.notifications.achievements) {
+                const isEn = state.gameState.settings.language === 'en';
+                const msg = isEn 
+                    ? `🏆 Achievement Unlocked: ${meta?.name || id}`
+                    : `🏆 解锁成就: ${meta?.name || id} - ${meta?.description}`;
+                
+                state.gameState.notifications.push({
+                    id: `ach_${Date.now()}_${id}`,
+                    message: msg,
+                    type: 'success',
+                    timestamp: Date.now()
+                });
+            }
+            state.gameState.logs.unshift(`🏆 成就解锁: ${meta?.name}`);
         });
-        state.gameState.logs.unshift(`🏆 成就解锁: ${meta?.name}`);
-    });
+    }
   }),
 
   addLog: (log) => set((state) => {
@@ -90,6 +115,19 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
   dismissNotification: (id) => set((state) => {
       const idx = state.gameState.notifications.findIndex(n => n.id === id);
       if (idx !== -1) state.gameState.notifications.splice(idx, 1);
+  }),
+
+  clearNotifications: () => set((state) => {
+      state.gameState.notifications = [];
+  }),
+
+  updateSettings: (settings) => set((state) => {
+      // Check if it's a notification update or root setting update
+      if ('trades' in settings || 'achievements' in settings || 'news' in settings) {
+          Object.assign(state.gameState.settings.notifications, settings);
+      } else {
+          Object.assign(state.gameState.settings, settings);
+      }
   })
 });
 
@@ -164,7 +202,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     });
 
     state.gameState.cash = player.cash;
-    state.gameState.logs.unshift(`📉 做空 (Short) ${id} - 100股`);
+    state.gameState.logs.unshift(`📈 做空 (Short) ${id} - 100股`);
   }),
 
   coverStock: (id, isFund) => set((state) => {
@@ -182,7 +220,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     });
 
     state.gameState.cash = player.cash;
-    state.gameState.logs.unshift(`📈 平仓 (Cover) ${id} + 100股`);
+    state.gameState.logs.unshift(`📉 平仓 (Cover) ${id} + 100股`);
   }),
 
   buyFutures: (resId, type) => set((state) => {

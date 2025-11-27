@@ -1,9 +1,12 @@
 
+
 import React, { memo, useState } from 'react';
-import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy } from 'lucide-react';
+import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy, Settings } from 'lucide-react';
 import { GameState, LivingStandard } from '../shared/types';
 import { AchievementsModal } from './modals/AchievementsModal';
+import { SettingsModal } from './modals/SettingsModal';
 import { useResponsive } from '../shared/hooks/useResponsive';
+import { getTranslation } from '../shared/utils/i18n';
 
 interface HeaderProps {
   gameState: GameState;
@@ -18,9 +21,14 @@ export const Header = memo<HeaderProps>(({
   gameState, isRunning, gameSpeed, onStop, onSetGameSpeed, onSetLivingStandard 
 }) => {
   const [showAchievements, setShowAchievements] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  
   const player = gameState.population.residents.find(r => r.isPlayer);
   const unlockedCount = gameState.achievements.length;
   const { isDesktop, isMobile } = useResponsive();
+  
+  const lang = gameState.settings.language;
+  const t = (key: string) => getTranslation(key, lang);
 
   return (
     <>
@@ -31,8 +39,8 @@ export const Header = memo<HeaderProps>(({
          </div>
          <div>
            <h1 className="text-lg font-bold text-stone-100 flex items-center gap-2">
-               {isMobile ? '伊甸谷' : '伊甸谷 EcoTycoon'}
-               {isDesktop && <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">混沌模式</span>}
+               {t('header.title')}
+               {isDesktop && <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">Chaos Mode</span>}
            </h1>
          </div>
       </div>
@@ -41,10 +49,19 @@ export const Header = memo<HeaderProps>(({
          <button 
              onClick={() => setShowAchievements(true)}
              className="flex items-center gap-2 text-stone-400 hover:text-amber-400 transition-colors bg-stone-800/50 px-2 sm:px-3 py-1.5 rounded hover:bg-stone-800"
+             title={t('header.achievements')}
          >
              <Trophy size={14} className={unlockedCount > 0 ? "text-amber-500" : ""} />
-             <span className="hidden sm:inline">成就</span>
+             <span className="hidden sm:inline">{t('header.achievements')}</span>
              {unlockedCount > 0 && <span className="bg-amber-900 text-amber-500 text-[10px] px-1.5 rounded-full">{unlockedCount}</span>}
+         </button>
+         
+         <button 
+             onClick={() => setShowSettings(true)}
+             className="flex items-center gap-2 text-stone-400 hover:text-blue-400 transition-colors bg-stone-800/50 px-2 sm:px-3 py-1.5 rounded hover:bg-stone-800"
+             title={t('settings.title')}
+         >
+             <Settings size={14} />
          </button>
 
          {player && isDesktop && (
@@ -55,10 +72,10 @@ export const Header = memo<HeaderProps>(({
                       value={player.livingStandard}
                       onChange={(e) => onSetLivingStandard(e.target.value as LivingStandard)}
                  >
-                     <option value="SURVIVAL">生存模式</option>
-                     <option value="BASIC">温饱</option>
-                     <option value="COMFORT">小康</option>
-                     <option value="LUXURY">奢靡</option>
+                     <option value="SURVIVAL">Survival</option>
+                     <option value="BASIC">Basic</option>
+                     <option value="COMFORT">Comfort</option>
+                     <option value="LUXURY">Luxury</option>
                  </select>
              </div>
          )}
@@ -77,7 +94,7 @@ export const Header = memo<HeaderProps>(({
             <button 
                 className={`p-1.5 rounded transition-colors ${!isRunning ? 'bg-red-900/50 text-red-200' : 'text-stone-400 hover:bg-stone-700 hover:text-stone-200'}`} 
                 onClick={onStop}
-                title="暂停"
+                title={t('header.pause')}
             >
                 <Pause size={14} fill={!isRunning ? "currentColor" : "none"}/>
             </button>
@@ -111,6 +128,7 @@ export const Header = memo<HeaderProps>(({
       </div>
     </header>
     {showAchievements && <AchievementsModal onClose={() => setShowAchievements(false)} />}
+    {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </>
   );
 });
