@@ -47,23 +47,24 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         transition={{ type: "spring", duration: 0.3 }}
+        className="w-full max-w-4xl"
       >
-        <Card className={`w-[800px] bg-stone-900 border-stone-700 max-h-[90vh] overflow-y-auto ${company.isBankrupt ? 'grayscale opacity-90' : ''}`} title={`公司控制台: ${company.name}`}>
+        <Card className={`w-full bg-stone-900 border-stone-700 max-h-[90vh] overflow-y-auto ${company.isBankrupt ? 'grayscale opacity-90' : ''}`} title={`公司控制台: ${company.name}`}>
           {company.isBankrupt && <div className="bg-red-900/80 text-white text-center p-2 mb-4 font-bold rounded">🚫 已破产</div>}
 
-          <div className="flex gap-2 mb-4 border-b border-stone-800 pb-2 overflow-x-auto">
-            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'overview' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('overview')}><Activity size={12}/> 经营概况</button>
-            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'chart' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('chart')}><BarChart size={12}/> 股价走势</button>
-            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'lines' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('lines')}><Briefcase size={12}/> 生产线</button>
+          <div className="flex gap-2 mb-4 border-b border-stone-800 pb-2 overflow-x-auto whitespace-nowrap custom-scrollbar">
+            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'overview' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('overview')}><Activity size={12}/> 经营</button>
+            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'chart' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('chart')}><BarChart size={12}/> 股价</button>
+            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'lines' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('lines')}><Briefcase size={12}/> 生产</button>
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'shareholders' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('shareholders')}><Users size={12}/> 股东</button>
-            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'ai' ? 'bg-purple-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('ai')}><Sparkles size={12}/> AI 财报分析</button>
+            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'ai' ? 'bg-purple-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('ai')}><Sparkles size={12}/> AI 研报</button>
           </div>
 
           <div className="space-y-6">
@@ -79,8 +80,8 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                             <div>Market Cap: {(company.sharePrice * company.totalShares).toFixed(0)} oz</div>
                         </div>
                     </div>
-                    <div className="h-[400px]">
-                        <KLineChart data={company.history} height={400} />
+                    <div className="h-[300px] sm:h-[400px]">
+                        <KLineChart data={company.history} height={undefined} />
                     </div>
                 </div>
             )}
@@ -90,7 +91,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                     {!aiAnalysis ? (
                         <div className="flex flex-col items-center justify-center h-full gap-4">
                              <Bot size={48} className="text-stone-600"/>
-                             <p className="text-stone-400 text-sm">让 Alpha AI 深入分析该公司的财务状况、估值和潜在风险。</p>
+                             <p className="text-stone-400 text-sm text-center">让 Alpha AI 深入分析该公司的财务状况、估值和潜在风险。</p>
                              <Button onClick={handleAnalysis} disabled={analyzing}>
                                  {analyzing ? "分析中..." : "生成 AI 研报"}
                              </Button>
@@ -115,7 +116,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                         <TrendingUp size={14}/> CEO 决策面板
                         </h4>
                         
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div className="bg-stone-900 p-3 rounded border border-stone-800">
                                 <label className="text-xs text-stone-500 block mb-2 font-bold flex items-center gap-1">
                                     <Anchor size={12}/> 智能薪资锚定 (Smart Wage)
@@ -216,16 +217,18 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
             )}
 
             {activeTab === 'shareholders' && (
-                <table className="w-full text-sm text-left text-stone-400">
-                    <thead className="text-xs uppercase bg-stone-800 text-stone-400">
-                        <tr><th className="px-3 py-2">股东</th><th className="px-3 py-2 text-right">持股</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-800">
-                        {company.shareholders.map((s, idx) => (
-                            <tr key={idx}><td className="px-3 py-2">{s.name}</td><td className="px-3 py-2 text-right">{s.count}</td></tr>
-                        ))}
-                    </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-stone-400">
+                        <thead className="text-xs uppercase bg-stone-800 text-stone-400">
+                            <tr><th className="px-3 py-2">股东</th><th className="px-3 py-2 text-right">持股</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-800">
+                            {company.shareholders.map((s, idx) => (
+                                <tr key={idx}><td className="px-3 py-2">{s.name}</td><td className="px-3 py-2 text-right">{s.count}</td></tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             )}
 
             <div className="pt-4 border-t border-stone-800 flex justify-between items-center">

@@ -1,7 +1,9 @@
 
-import React, { memo } from 'react';
-import { TrendingUp, Wallet, Calendar, Pause, Coffee } from 'lucide-react';
+import React, { memo, useState } from 'react';
+import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy } from 'lucide-react';
 import { GameState, LivingStandard } from '../shared/types';
+import { AchievementsModal } from './modals/AchievementsModal';
+import { useResponsive } from '../shared/hooks/useResponsive';
 
 interface HeaderProps {
   gameState: GameState;
@@ -15,21 +17,37 @@ interface HeaderProps {
 export const Header = memo<HeaderProps>(({ 
   gameState, isRunning, gameSpeed, onStop, onSetGameSpeed, onSetLivingStandard 
 }) => {
+  const [showAchievements, setShowAchievements] = useState(false);
   const player = gameState.population.residents.find(r => r.isPlayer);
+  const unlockedCount = gameState.achievements.length;
+  const { isDesktop, isMobile } = useResponsive();
 
   return (
+    <>
     <header className="fixed top-0 inset-x-0 h-16 bg-stone-900/90 backdrop-blur border-b border-stone-800 z-40 px-4 flex items-center justify-between shadow-lg">
       <div className="flex items-center gap-2">
          <div className="bg-gradient-to-br from-amber-500 to-yellow-600 p-1.5 rounded-lg text-white shadow-lg shadow-amber-900/20">
             <TrendingUp size={20} />
          </div>
          <div>
-           <h1 className="text-lg font-bold text-stone-100">伊甸谷 <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">混沌模式</span></h1>
+           <h1 className="text-lg font-bold text-stone-100 flex items-center gap-2">
+               {isMobile ? '伊甸谷' : '伊甸谷 EcoTycoon'}
+               {isDesktop && <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">混沌模式</span>}
+           </h1>
          </div>
       </div>
 
-      <div className="flex items-center gap-4 text-sm font-mono">
-         {player && (
+      <div className="flex items-center gap-2 sm:gap-4 text-sm font-mono">
+         <button 
+             onClick={() => setShowAchievements(true)}
+             className="flex items-center gap-2 text-stone-400 hover:text-amber-400 transition-colors bg-stone-800/50 px-2 sm:px-3 py-1.5 rounded hover:bg-stone-800"
+         >
+             <Trophy size={14} className={unlockedCount > 0 ? "text-amber-500" : ""} />
+             <span className="hidden sm:inline">成就</span>
+             {unlockedCount > 0 && <span className="bg-amber-900 text-amber-500 text-[10px] px-1.5 rounded-full">{unlockedCount}</span>}
+         </button>
+
+         {player && isDesktop && (
              <div className="flex items-center gap-2 bg-stone-800 rounded p-1 hidden sm:flex">
                  <Coffee size={14} className="ml-2 text-stone-400"/>
                  <select 
@@ -45,41 +63,54 @@ export const Header = memo<HeaderProps>(({
              </div>
          )}
 
-         <div className="hidden sm:flex items-center gap-2 text-amber-400 bg-amber-950/30 px-3 py-1.5 rounded border border-amber-900/50 shadow-inner">
+         <div className="flex items-center gap-2 text-amber-400 bg-amber-950/30 px-2 sm:px-3 py-1.5 rounded border border-amber-900/50 shadow-inner">
             <Wallet size={14} />
-            {gameState.cash.toFixed(2)} oz
+            {Math.floor(gameState.cash)} <span className="hidden sm:inline">oz</span>
          </div>
-         <div className="flex items-center gap-2 text-stone-400 bg-stone-800/50 px-3 py-1.5 rounded">
+         <div className="hidden sm:flex items-center gap-2 text-stone-400 bg-stone-800/50 px-3 py-1.5 rounded">
             <Calendar size={14} />
-            第 {gameState.day} 天
+            D{gameState.day}
          </div>
          
-         <div className="flex items-center bg-stone-800 rounded-lg p-1 gap-1 border border-stone-700">
-           <button 
-              className={`p-1.5 rounded transition-colors ${!isRunning ? 'bg-red-900/50 text-red-200' : 'text-stone-400 hover:bg-stone-700 hover:text-stone-200'}`} 
-              onClick={onStop}
-              title="暂停"
-           >
-              <Pause size={14} fill={!isRunning ? "currentColor" : "none"}/>
-           </button>
-           
-           <div className="w-px h-4 bg-stone-700 mx-1"></div>
+         {!isMobile && (
+             <div className="flex items-center bg-stone-800 rounded-lg p-1 gap-1 border border-stone-700">
+            <button 
+                className={`p-1.5 rounded transition-colors ${!isRunning ? 'bg-red-900/50 text-red-200' : 'text-stone-400 hover:bg-stone-700 hover:text-stone-200'}`} 
+                onClick={onStop}
+                title="暂停"
+            >
+                <Pause size={14} fill={!isRunning ? "currentColor" : "none"}/>
+            </button>
+            
+            <div className="w-px h-4 bg-stone-700 mx-1"></div>
 
-           {[1, 2, 5].map(speed => (
-              <button
-                  key={speed}
-                  onClick={() => onSetGameSpeed(speed)}
-                  className={`px-2 py-0.5 text-xs font-mono font-bold rounded transition-all duration-200 ${
-                      isRunning && gameSpeed === speed 
-                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50 scale-105' 
-                      : 'text-stone-500 hover:bg-stone-700 hover:text-stone-300'
-                  }`}
-              >
-                  {speed}x
-              </button>
-           ))}
-         </div>
+            {[1, 2, 5].map(speed => (
+                <button
+                    key={speed}
+                    onClick={() => onSetGameSpeed(speed)}
+                    className={`px-2 py-0.5 text-xs font-mono font-bold rounded transition-all duration-200 ${
+                        isRunning && gameSpeed === speed 
+                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/50 scale-105' 
+                        : 'text-stone-500 hover:bg-stone-700 hover:text-stone-300'
+                    }`}
+                >
+                    {speed}x
+                </button>
+            ))}
+            </div>
+         )}
+         
+         {isMobile && (
+             <button 
+                 onClick={onStop}
+                 className={`p-2 rounded ${!isRunning ? 'text-red-400' : 'text-stone-500'}`}
+             >
+                 <Pause size={16} fill={!isRunning ? "currentColor" : "none"}/>
+             </button>
+         )}
       </div>
     </header>
+    {showAchievements && <AchievementsModal onClose={() => setShowAchievements(false)} />}
+    </>
   );
 });

@@ -1,6 +1,5 @@
-
 import { GoogleGenAI } from "@google/genai";
-import { GameState, GodModeData, ResourceType, ProductType, Company } from "../shared/types";
+import { GameState, GodModeData, ResourceType, ProductType, Company, NewsEvent } from "../shared/types";
 
 const NEWS_EVENTS = [
     { headline: "遭遇旱灾", description: "由于持续的高温干旱，全谷的粮食产量预计将下降 30%。", impactType: "BAD", target: ResourceType.GRAIN, modifier: -0.3 },
@@ -13,7 +12,7 @@ const NEWS_EVENTS = [
 const getEconomicSummary = (gameState: GameState, godModeData: GodModeData) => {
     const getSupply = (itemId: string) => {
         const book = gameState.market[itemId];
-        return book ? book.asks.reduce((s, o) => s + (o.amount - o.filled), 0) : 0;
+        return book ? book.asks.reduce((s, o) => s + (o.remainingQuantity), 0) : 0;
     };
 
     return {
@@ -124,12 +123,13 @@ export const analyzeCompany = async (company: Company, gameState: GameState): Pr
     }
 }
 
-export const generateMarketEvent = async (currentDay: number): Promise<{headline: string, description: string, impactType: 'GOOD'|'BAD'|'NEUTRAL', turnCreated: number, effect?: any} | null> => {
+export const generateMarketEvent = async (currentDay: number): Promise<NewsEvent | null> => {
     if (Math.random() > 0.1) return null;
 
     const eventTemplate = NEWS_EVENTS[Math.floor(Math.random() * NEWS_EVENTS.length)];
     
     return {
+        type: 'NEWS',
         headline: eventTemplate.headline,
         description: eventTemplate.description,
         impactType: eventTemplate.impactType as any,

@@ -340,5 +340,9 @@ export const INITIAL_STATE: GameState = {
         totalInventoryValue: 0, totalMarketCap: 0, totalFuturesNotional: 0,
         inventoryAudit: {}
     },
-    market: market
+    market: market,
+    
+    // New Features
+    achievements: [],
+    notifications: []
 };

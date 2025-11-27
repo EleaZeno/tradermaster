@@ -51,7 +51,8 @@ export class FinancialSystem {
     // Check Market Inventory via Order Book (Sell Side)
     const getMarketSupply = (itemId: string) => {
         const book = state.market[itemId];
-        return book ? book.asks.reduce((s, o) => s + (o.amount - o.filled), 0) : 0;
+        // Fix: Use remainingQuantity as per Order type definition
+        return book ? book.asks.reduce((s, o) => s + (o.remainingQuantity), 0) : 0;
     };
 
     let totalConsumptionValue = 0;

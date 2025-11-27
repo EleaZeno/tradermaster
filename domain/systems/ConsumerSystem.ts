@@ -71,7 +71,7 @@ export class ConsumerSystem {
                   side: 'BUY',
                   type: 'MARKET',
                   price: 0,
-                  amount: Math.ceil(deficit)
+                  quantity: Math.ceil(deficit)
               }, context);
           } else {
               // Buy Grain (Inferior Good)
@@ -84,7 +84,7 @@ export class ConsumerSystem {
                       side: 'BUY',
                       type: 'MARKET',
                       price: 0,
-                      amount: Math.ceil(deficit)
+                      quantity: Math.ceil(deficit)
                   }, context);
               }
           }

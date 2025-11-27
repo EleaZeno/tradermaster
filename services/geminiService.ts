@@ -43,7 +43,8 @@ export const getFinancialAdvisorResponse = async (
   const msg = userMessage.toLowerCase();
   
   const grainMarket = gameState.market[ResourceType.GRAIN];
-  const grainStock = grainMarket ? grainMarket.asks.reduce((acc, order) => acc + (order.amount - order.filled), 0) : 0;
+  // Fix: Order uses quantity/remainingQuantity now, not amount/filled
+  const grainStock = grainMarket ? grainMarket.asks.reduce((acc, order) => acc + (order.remainingQuantity), 0) : 0;
   
   if (grainStock < 20) return pickTemplate(ADVICE_TEMPLATES.CRISIS_FAMINE, {});
 

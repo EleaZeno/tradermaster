@@ -117,7 +117,7 @@ export const useGameStore = create<GameStore>()(
               side: action === 'buy' ? 'BUY' : 'SELL',
               type: 'MARKET',
               price: 0,
-              amount: amount
+              quantity: amount // Corrected from amount to quantity
           });
           
           state.gameState.cash = playerRes.cash;
@@ -150,7 +150,7 @@ export const useGameStore = create<GameStore>()(
                 monthlySalesVolume: 0, monthlyProductionVolume: 0, lastRevenue: 0, lastProfit: 0,
                 reports: [], history: [{ day: state.gameState.day, open: 1.0, high: 1.0, low: 1.0, close: 1.0, volume: 0 }],
                 // @ts-ignore
-                type: 'CORPORATION', wageStructure: 'PERFORMANCE', ceoId: 'res_player', isBankrupt: false, landTokens: 0
+                type: 'CORPORATION', wageStructure: 'PERFORMANCE', ceoId: 'res_player', isBankrupt: false, landTokens: 0, tobinQ: 1.0
             });
 
             // Init Market
@@ -177,7 +177,7 @@ export const useGameStore = create<GameStore>()(
                 side: 'BUY',
                 type: 'MARKET',
                 price: 0,
-                amount: 100 
+                quantity: 100 
             });
             state.gameState.cash = player.cash;
         }
@@ -194,7 +194,7 @@ export const useGameStore = create<GameStore>()(
             side: 'SELL',
             type: 'MARKET',
             price: 0,
-            amount: 100
+            quantity: 100
         });
         state.gameState.cash = player.cash;
     }),

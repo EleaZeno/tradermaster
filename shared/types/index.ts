@@ -1,5 +1,4 @@
 
-
 import { ReactNode } from 'react';
 
 export enum ResourceType {
@@ -265,16 +264,38 @@ export interface Election {
   winnerId: string | null;
 }
 
-export interface MarketEvent {
+export type MarketEventType = 'NEWS' | 'PRICE_CHANGE' | 'ORDER_EXECUTED' | 'MARKET_CRASH';
+
+export interface BaseEvent {
+  turnCreated: number;
+  type: MarketEventType;
+}
+
+export interface NewsEvent extends BaseEvent {
+  type: 'NEWS';
   headline: string;
   description: string;
   impactType: 'GOOD' | 'BAD' | 'NEUTRAL';
-  turnCreated: number;
   effect?: {
       target: string;
       modifier: number;
   };
 }
+
+export interface PriceChangeEvent extends BaseEvent {
+  type: 'PRICE_CHANGE';
+  itemId: string;
+  oldPrice: number;
+  newPrice: number;
+}
+
+export interface OrderExecutedEvent extends BaseEvent {
+  type: 'ORDER_EXECUTED';
+  orderId: string;
+  tradeDetails: Trade;
+}
+
+export type MarketEvent = NewsEvent | PriceChangeEvent | OrderExecutedEvent;
 
 export interface ChatMessage {
   role: 'user' | 'model';
@@ -321,6 +342,7 @@ export interface EconomicSnapshot {
 
 export type OrderSide = 'BUY' | 'SELL';
 export type OrderType = 'LIMIT' | 'MARKET';
+export type OrderStatus = 'PENDING' | 'EXECUTED' | 'CANCELLED' | 'PARTIALLY_EXECUTED';
 
 export interface Order {
     id: string;
@@ -330,14 +352,15 @@ export interface Order {
     side: OrderSide;
     type: OrderType;
     price: number; 
-    amount: number;
-    filled: number;
+    quantity: number; // Replaces 'amount'
+    remainingQuantity: number; // New: explicit tracking
+    status: OrderStatus;
     timestamp: number;
 }
 
 export interface Trade {
     price: number;
-    amount: number;
+    quantity: number;
     timestamp: number;
     buyerId: string;
     sellerId: string;
@@ -360,6 +383,18 @@ export interface MacroMetric {
   unemployment: number;// Unemployment rate (0-1)
 }
 
+export interface AchievementState {
+  id: string;
+  unlockedAt: number;
+}
+
+export interface Notification {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  timestamp: number;
+}
+
 export interface GameState {
   cash: number; 
   day: number;
@@ -380,6 +415,10 @@ export interface GameState {
   logs: string[];
   economicOverview: EconomicSnapshot; 
   market: Record<string, OrderBook>;
+  
+  // New features
+  achievements: AchievementState[];
+  notifications: Notification[];
 }
 
 export interface AgentAdvice {

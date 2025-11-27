@@ -69,7 +69,7 @@ export class ProductionSystem {
                      side: 'SELL',
                      type: 'LIMIT',
                      price: parseFloat(targetPrice.toFixed(2)),
-                     amount: Math.floor(surplus)
+                     quantity: Math.floor(surplus)
                  }, context);
              }
       });
@@ -96,7 +96,7 @@ export class ProductionSystem {
                    side: 'SELL',
                    type: 'LIMIT',
                    price: finalPrice,
-                   amount: Math.floor(stock)
+                   quantity: Math.floor(stock)
                }, context);
           }
       });
@@ -227,7 +227,7 @@ export class ProductionSystem {
                             side: 'BUY',
                             type: 'LIMIT', // Use Limit to avoid slippage? Or Market for speed?
                             price: bestAsk * 1.05, // Willing to pay slight premium
-                            amount: buyAmount
+                            quantity: buyAmount
                         }, context);
                         currentRaw = company.inventory.raw[ResourceType.GRAIN] || 0;
                    }

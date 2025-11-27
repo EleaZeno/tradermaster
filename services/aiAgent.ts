@@ -1,3 +1,4 @@
+
 import { GameState, GodModeData } from "../shared/types";
 
 const ADVISOR_PROMPTS = {
@@ -29,7 +30,8 @@ export const getFinancialAdvisorResponse = async (
   }
   if (msg.includes("野果") || msg.includes("粮食") || msg.includes("食物")) {
     const grainBook = gameState.market['GRAIN'];
-    const stock = grainBook ? grainBook.asks.reduce((acc, order) => acc + (order.amount - order.filled), 0) : 0;
+    // Fix: Order uses quantity/remainingQuantity now
+    const stock = grainBook ? grainBook.asks.reduce((acc, order) => acc + (order.remainingQuantity), 0) : 0;
     return `当前的粮食市场供应量为 ${Math.floor(stock)}。如果库存持续下降，建议投资'伊甸农业'或'伊甸食品'来扩大生产。`;
   }
   if (msg.includes("股票") || msg.includes("股价")) {

@@ -4,7 +4,7 @@ import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesCon
 import { INITIAL_STATE } from '../initialState';
 import { processGameTick } from '../../domain/gameLogic';
 import { MarketSystem } from '../../domain/systems/MarketSystem';
-import { createEmptyBook } from '../initialState'; // Assuming we export this helper or duplicate minimal logic
+import { checkAchievements, ACHIEVEMENTS } from '../../services/achievementService';
 
 // --- Types ---
 export interface GameSlice {
@@ -18,6 +18,7 @@ export interface GameSlice {
   addLog: (log: string) => void;
   addEvent: (event: MarketEvent) => void;
   updateChatHistory: (history: any[]) => void;
+  dismissNotification: (id: string) => void;
 }
 
 export interface PlayerSlice {
@@ -57,6 +58,20 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
   tick: () => set((state) => {
     processGameTick(state.gameState);
     if (state.gameState.logs.length > 50) state.gameState.logs = state.gameState.logs.slice(0, 50);
+
+    // Check Achievements
+    const newUnlocked = checkAchievements(state.gameState);
+    newUnlocked.forEach(id => {
+        state.gameState.achievements.push({ id, unlockedAt: Date.now() });
+        const meta = ACHIEVEMENTS.find(a => a.id === id);
+        state.gameState.notifications.push({
+            id: `ach_${Date.now()}_${id}`,
+            message: `🏆 解锁成就: ${meta?.name || id} - ${meta?.description}`,
+            type: 'success',
+            timestamp: Date.now()
+        });
+        state.gameState.logs.unshift(`🏆 成就解锁: ${meta?.name}`);
+    });
   }),
 
   addLog: (log) => set((state) => {
@@ -71,6 +86,11 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
   updateChatHistory: (history) => set((state) => {
     state.gameState.chatHistory = history;
   }),
+
+  dismissNotification: (id) => set((state) => {
+      const idx = state.gameState.notifications.findIndex(n => n.id === id);
+      if (idx !== -1) state.gameState.notifications.splice(idx, 1);
+  })
 });
 
 export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never]], [], PlayerSlice> = (set) => ({
@@ -80,7 +100,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     if (!playerRes) return;
 
     const isRes = Object.values(ResourceType).includes(itemId as ResourceType);
-    let amount = isRes ? 10 : 1;
+    let quantity = isRes ? 10 : 1;
 
     MarketSystem.submitOrder(state.gameState, {
       ownerId: playerRes.id,
@@ -89,7 +109,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
       side: action === 'buy' ? 'BUY' : 'SELL',
       type: 'MARKET',
       price: 0,
-      amount: amount
+      quantity: quantity
     });
 
     state.gameState.cash = playerRes.cash;
@@ -107,7 +127,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
         side: 'BUY',
         type: 'MARKET',
         price: 0,
-        amount: 100
+        quantity: 100
       });
       state.gameState.cash = player.cash;
     }
@@ -124,7 +144,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
       side: 'SELL',
       type: 'MARKET',
       price: 0,
-      amount: 100
+      quantity: 100
     });
     state.gameState.cash = player.cash;
   }),
@@ -140,7 +160,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
       side: 'SELL',
       type: 'MARKET',
       price: 0,
-      amount: 100
+      quantity: 100
     });
 
     state.gameState.cash = player.cash;
@@ -158,7 +178,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
       side: 'BUY',
       type: 'MARKET',
       price: 0,
-      amount: 100
+      quantity: 100
     });
 
     state.gameState.cash = player.cash;
@@ -223,6 +243,14 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
       state.gameState.market[newId] = { bids: [], asks: [], lastPrice: 1.0, history: [] };
 
       state.gameState.logs.unshift(`🎉 ${name} 上市成功！`);
+      
+      // Notify
+      state.gameState.notifications.push({
+          id: `ipo_${Date.now()}`,
+          message: `新公司 ${name} IPO 成功，当前股价 1.0 oz`,
+          type: 'success',
+          timestamp: Date.now()
+      });
     }
   }),
 
@@ -245,6 +273,12 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
       }
     });
     state.gameState.logs.unshift(`💸 ${comp.name} 分红 ${totalDiv.toFixed(0)} oz`);
+    state.gameState.notifications.push({
+         id: `div_${Date.now()}`,
+         message: `${comp.name} 发放分红，你获得了 ${(totalDiv/comp.totalShares * (comp.shareholders.find(s=>s.type === 'PLAYER')?.count || 0)).toFixed(2)} oz`,
+         type: 'success',
+         timestamp: Date.now()
+    });
   }),
 
   addLine: (compId, type) => set((state) => {

@@ -21,15 +21,16 @@ export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ cash, on
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         transition={{ type: "spring", duration: 0.3 }}
+        className="w-full max-w-sm"
       >
-        <Card className="w-96 bg-stone-900 border-stone-700" title="注册新公司 (IPO)">
+        <Card className="w-full bg-stone-900 border-stone-700" title="注册新公司 (IPO)">
             <div className="space-y-4">
               <div>
                 <label className="text-xs text-stone-500 block mb-1">公司名称</label>

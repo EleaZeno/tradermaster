@@ -1,5 +1,5 @@
 
-import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident } from '../shared/types';
+import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident, MarketEvent } from '../shared/types';
 import { LaborSystem } from './systems/LaborSystem';
 import { ProductionSystem } from './systems/ProductionSystem';
 import { ConsumerSystem } from './systems/ConsumerSystem';
@@ -51,7 +51,7 @@ export const processGameTick = (gameState: GameState): void => {
         let modifier = 1.0;
         const activeEvents = gameState.events.filter(event => gameState.day - event.turnCreated < 5);
         activeEvents.forEach(event => {
-            if (event.effect && event.effect.target === target) {
+            if (event.type === 'NEWS' && event.effect && event.effect.target === target) {
                 modifier += event.effect.modifier;
             }
         });

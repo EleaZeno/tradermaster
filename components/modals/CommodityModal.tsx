@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { ResourceItem, ProductItem, Candle } from '../../shared/types';
 import { Card, Button } from '../../shared/components';
@@ -15,7 +16,8 @@ interface CommodityModalProps {
 export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onClose, onTrade }) => {
   const gameState = useGameStore(s => s.gameState);
   const book = gameState.market[item.id];
-  const marketDepth = book ? book.asks.reduce((acc, order) => acc + (order.amount - order.filled), 0) : 0;
+  // Fix: Order uses remainingQuantity
+  const marketDepth = book ? book.asks.reduce((acc, order) => acc + (order.remainingQuantity), 0) : 0;
 
   const currentPrice = item.history.length > 0 ? item.history[item.history.length - 1].close : 0;
   const openPrice = item.history.length > 0 ? item.history[item.history.length - 1].open : 0;
