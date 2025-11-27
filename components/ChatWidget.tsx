@@ -1,7 +1,10 @@
+
 import React, { useRef, useEffect, useState } from 'react';
 import { Bot, Send, X } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
 import { GameState, GodModeData, ChatMessage } from '../shared/types';
 import { getFinancialAdvisorResponse } from '../services/advisorService';
+import { useGameStore } from '../shared/store/useGameStore';
 
 // @ts-ignore
 const marked = window.marked;
@@ -15,30 +18,35 @@ interface ChatWidgetProps {
 export const ChatWidget: React.FC<ChatWidgetProps> = ({ gameState, godModeData, onUpdateHistory }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const aiMutation = useMutation({
+    mutationFn: async ({ message, history }: { message: string, history: ChatMessage[] }) => {
+      const apiHistory = history.map(c => ({ role: c.role, text: c.text }));
+      return await getFinancialAdvisorResponse(message, gameState, godModeData, apiHistory);
+    },
+    onSuccess: (data) => {
+      const currentHistory = useGameStore.getState().gameState.chatHistory;
+      const botMsg: ChatMessage = { role: 'model', text: data, timestamp: Date.now() };
+      onUpdateHistory([...currentHistory, botMsg]);
+    }
+  });
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [gameState.chatHistory, isOpen]);
+  }, [gameState.chatHistory, isOpen, aiMutation.isPending]);
 
   const handleSend = async () => {
-    if (!input.trim() || isTyping) return;
+    if (!input.trim() || aiMutation.isPending) return;
+    
     const userMsg: ChatMessage = { role: 'user', text: input, timestamp: Date.now() };
-    onUpdateHistory([...gameState.chatHistory, userMsg]);
+    const newHistory = [...gameState.chatHistory, userMsg];
+    
+    onUpdateHistory(newHistory);
+    const msgToSend = input;
     setInput("");
-    setIsTyping(true);
 
-    const response = await getFinancialAdvisorResponse(
-      input, 
-      gameState, 
-      godModeData, 
-      gameState.chatHistory.map(c => ({ role: c.role, text: c.text }))
-    );
-
-    const botMsg: ChatMessage = { role: 'model', text: response, timestamp: Date.now() };
-    onUpdateHistory([...gameState.chatHistory, userMsg, botMsg]);
-    setIsTyping(false);
+    aiMutation.mutate({ message: msgToSend, history: newHistory });
   };
 
   return (
@@ -58,7 +66,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ gameState, godModeData, 
                  />
                </div>
              ))}
-             {isTyping && <div className="text-stone-500 text-xs italic animate-pulse">Alpha 正在思考...</div>}
+             {aiMutation.isPending && <div className="text-stone-500 text-xs italic animate-pulse">Alpha 正在思考...</div>}
              <div ref={chatEndRef}></div>
           </div>
           <div className="p-3 bg-stone-800 border-t border-stone-700 flex gap-2">
@@ -70,7 +78,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ gameState, godModeData, 
                 placeholder="输入问题..." 
                 className="flex-1 bg-stone-900 border border-stone-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
              />
-             <button onClick={handleSend} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-500 disabled:opacity-50" disabled={isTyping}>
+             <button onClick={handleSend} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-500 disabled:opacity-50" disabled={aiMutation.isPending}>
                 <Send size={16} />
              </button>
           </div>

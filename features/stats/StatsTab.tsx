@@ -89,8 +89,8 @@ export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="货币供应分布 (Money Supply)" className="bg-stone-900 border-stone-800">
-             <div className="h-72 w-full relative">
+          <Card title="货币供应分布 (Money Supply)" className="bg-stone-900 border-stone-800 h-96">
+             <div className="w-full h-full relative">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                     <Pie data={moneySupplyData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value" stroke="none">
@@ -106,8 +106,8 @@ export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
             </div>
           </Card>
 
-          <Card title="社会阶层结构 (Class Structure)" className="bg-stone-900 border-stone-800">
-             <div className="h-72 w-full relative">
+          <Card title="社会阶层结构 (Class Structure)" className="bg-stone-900 border-stone-800 h-96">
+             <div className="w-full h-full relative">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                     <Pie data={classData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value" stroke="none">

@@ -19,6 +19,7 @@ import { CompanyModal } from './features/companies/CompanyModal';
 import { CreateCompanyModal } from './features/companies/CreateCompanyModal';
 import { generateMarketEvent } from './services/advisorService';
 import { useGodModeData } from './shared/hooks/useGodModeData';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const App: React.FC = () => {
   useGameLoop();
@@ -94,8 +95,14 @@ const App: React.FC = () => {
       <main className="pt-24 pb-10 px-4 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
          <div className="lg:col-span-3 space-y-4 h-fit sticky top-24">
             
+            <AnimatePresence>
             {latestEvent && (gameState.day - latestEvent.turnCreated < 5) && (
-                <div className="animate-in slide-in-from-top-4 duration-500">
+                <motion.div 
+                    initial={{ opacity: 0, y: -20, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                    transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                >
                     <Card className={`border-l-4 ${latestEvent.impactType === 'BAD' ? 'border-l-red-500 bg-red-950/20' : latestEvent.impactType === 'GOOD' ? 'border-l-emerald-500 bg-emerald-950/20' : 'border-l-blue-500'}`}>
                         <div className="flex items-center gap-2 mb-1">
                             <AlertTriangle size={14} className={latestEvent.impactType === 'BAD' ? 'text-red-500' : 'text-stone-400'}/>
@@ -103,8 +110,9 @@ const App: React.FC = () => {
                         </div>
                         <p className="text-xs text-stone-400 leading-relaxed">{latestEvent.description}</p>
                     </Card>
-                </div>
+                </motion.div>
             )}
+            </AnimatePresence>
 
             <Card className="bg-stone-900 border-stone-800" title="市场导航">
               <div className="space-y-1">
@@ -122,7 +130,13 @@ const App: React.FC = () => {
             <Card className="bg-gradient-to-b from-stone-800 to-stone-900 border-stone-700" title="我的商业帝国">
                <div className="space-y-2">
                  {gameState.companies.filter(c => c.isPlayerFounded).map(c => (
-                    <div key={c.id} className="p-3 bg-stone-950 rounded border border-stone-800 hover:border-stone-600 cursor-pointer flex justify-between items-center" onClick={() => setSelectedCompanyId(c.id)}>
+                    <motion.div 
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        key={c.id} 
+                        className="p-3 bg-stone-950 rounded border border-stone-800 hover:border-stone-600 cursor-pointer flex justify-between items-center" 
+                        onClick={() => setSelectedCompanyId(c.id)}
+                    >
                        <div>
                           <div className="font-bold text-sm flex items-center gap-1">
                             {c.name} {c.isBankrupt && <span className="text-red-500 text-[10px] bg-red-900/20 px-1 rounded">破产</span>}
@@ -130,7 +144,7 @@ const App: React.FC = () => {
                           <div className="text-xs text-stone-500">员工: {c.employees} | 现金: {Math.floor(c.cash)} oz</div>
                        </div>
                        <Settings size={14} className="text-stone-500"/>
-                    </div>
+                    </motion.div>
                  ))}
                  <Button className="w-full mt-2" variant="success" size="sm" onClick={() => setShowCreateCompany(true)}>
                     <Plus size={14}/> 注册新公司 (20 oz)
@@ -139,59 +153,72 @@ const App: React.FC = () => {
             </Card>
 
             <Card className="h-64 flex flex-col bg-stone-900 border-stone-800" title="系统日志">
-               <div className="flex-1 overflow-y-auto text-xs space-y-3 pr-2 text-stone-400 font-mono custom-scrollbar">
-                  {gameState.logs.map((l, i) => (
-                     <div key={i} className="border-b border-stone-800 pb-2 last:border-0">
-                       <span className="text-stone-600 mr-2">[{gameState.day - i > 0 ? gameState.day - i : 1}]</span>
-                       {l}
-                     </div>
-                  ))}
+               <div className="flex-1 text-xs font-mono h-[190px] overflow-y-auto custom-scrollbar">
+                  {gameState.logs.map((log, index) => {
+                      const logDay = Math.max(1, gameState.day - Math.floor(index / 3)); 
+                      return (
+                        <div key={index} className="border-b border-stone-800 flex items-center px-2 py-1 hover:bg-stone-800/50 transition-colors">
+                          <span className="text-stone-600 mr-2 min-w-[30px] text-[10px] select-none text-right">[{logDay}]</span>
+                          <span className="truncate text-stone-400 text-xs" title={log}>{log}</span>
+                        </div>
+                      );
+                  })}
                </div>
             </Card>
          </div>
 
          <div className="lg:col-span-9 space-y-6">
-            {activeTab === 'commodities' && (
-              <CommoditiesTab 
-                resources={gameState.resources} 
-                products={gameState.products} 
-                cash={gameState.cash} 
-                futures={gameState.futures}
-                day={gameState.day}
-                onTrade={trade} 
-                onBuyFutures={buyFutures}
-              />
-            )}
+            <AnimatePresence mode="wait">
+                <motion.div 
+                    key={activeTab}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.2 }}
+                >
+                    {activeTab === 'commodities' && (
+                    <CommoditiesTab 
+                        resources={gameState.resources} 
+                        products={gameState.products} 
+                        cash={gameState.cash} 
+                        futures={gameState.futures}
+                        day={gameState.day}
+                        onTrade={trade} 
+                        onBuyFutures={buyFutures}
+                    />
+                    )}
 
-            {activeTab === 'companies' && (
-              <CompaniesTab 
-                companies={gameState.companies} 
-                funds={gameState.funds}
-                products={gameState.products} 
-                cash={gameState.cash}
-                onBuy={(id, isFund) => buyStock(id, isFund)}
-                onSell={(id, isFund) => sellStock(id, isFund)}
-                onShort={() => {}} 
-                onCover={() => {}}
-                onSelectCompany={setSelectedCompanyId}
-              />
-            )}
+                    {activeTab === 'companies' && (
+                    <CompaniesTab 
+                        companies={gameState.companies} 
+                        funds={gameState.funds}
+                        products={gameState.products} 
+                        cash={gameState.cash}
+                        onBuy={(id, isFund) => buyStock(id, isFund)}
+                        onSell={(id, isFund) => sellStock(id, isFund)}
+                        onShort={() => {}} 
+                        onCover={() => {}}
+                        onSelectCompany={setSelectedCompanyId}
+                    />
+                    )}
 
-            {activeTab === 'banking' && (
-              <BankingTab bank={gameState.bank} />
-            )}
+                    {activeTab === 'banking' && (
+                    <BankingTab bank={gameState.bank} />
+                    )}
 
-            {activeTab === 'stats' && (
-              <StatsTab gameState={gameState} industryStats={industryStats} />
-            )}
+                    {activeTab === 'stats' && (
+                    <StatsTab gameState={gameState} industryStats={industryStats} />
+                    )}
 
-            {activeTab === 'cityhall' && (
-              <CityHallTab gameState={gameState} companies={gameState.companies} />
-            )}
+                    {activeTab === 'cityhall' && (
+                    <CityHallTab gameState={gameState} companies={gameState.companies} />
+                    )}
 
-            {activeTab === 'validation' && (
-              <ValidationTab gameState={gameState} />
-            )}
+                    {activeTab === 'validation' && (
+                    <ValidationTab gameState={gameState} />
+                    )}
+                </motion.div>
+            </AnimatePresence>
          </div>
       </main>
 
@@ -201,6 +228,7 @@ const App: React.FC = () => {
         onUpdateHistory={updateChatHistory} 
       />
 
+      <AnimatePresence>
       {showCreateCompany && (
         <CreateCompanyModal 
           products={gameState.products}
@@ -210,7 +238,9 @@ const App: React.FC = () => {
           onCreate={handleCreateCompany} 
         />
       )}
+      </AnimatePresence>
 
+      <AnimatePresence>
       {selectedCompany && (
         <CompanyModal 
           company={selectedCompany} 
@@ -224,6 +254,7 @@ const App: React.FC = () => {
           onAddLine={addLine}
         />
       )}
+      </AnimatePresence>
     </div>
   );
 };

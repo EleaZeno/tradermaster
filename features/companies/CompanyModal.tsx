@@ -5,6 +5,7 @@ import { Company, ProductType, ProductItem, ResourceType, IndustryType, Resource
 import { Card, Button } from '../../shared/components';
 import { RESOURCE_ICONS } from '../../shared/assets';
 import { KLineChart } from '../../shared/components/charts/KLineChart';
+import { motion } from 'framer-motion';
 
 interface CompanyModalProps {
   company: Company;
@@ -26,8 +27,19 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const wageMultiplier = company.wageMultiplier || 1.5;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <Card className={`w-[800px] bg-stone-900 border-stone-700 max-h-[90vh] overflow-y-auto ${company.isBankrupt ? 'grayscale opacity-90' : ''}`} title={`公司控制台: ${company.name}`}>
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ type: "spring", duration: 0.3 }}
+      >
+        <Card className={`w-[800px] bg-stone-900 border-stone-700 max-h-[90vh] overflow-y-auto ${company.isBankrupt ? 'grayscale opacity-90' : ''}`} title={`公司控制台: ${company.name}`}>
           {company.isBankrupt && <div className="bg-red-900/80 text-white text-center p-2 mb-4 font-bold rounded">🚫 已破产</div>}
 
           <div className="flex gap-2 mb-4 border-b border-stone-800 pb-2">
@@ -181,7 +193,8 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                 <Button className="w-full" variant="secondary" onClick={onClose}>关闭</Button>
             </div>
           </div>
-      </Card>
-    </div>
+        </Card>
+      </motion.div>
+    </motion.div>
   );
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { GameState, Company } from '../../shared/types';
 import { Card } from '../../shared/components';
@@ -205,61 +206,64 @@ export const CityHallTab: React.FC<CityHallTabProps> = ({ gameState, companies }
              </div>
           </div>
 
-          <div className="overflow-x-auto max-h-[500px] overflow-y-auto custom-scrollbar">
-             <table className="w-full text-sm text-left text-stone-400">
-                <thead className="text-xs uppercase bg-stone-950 text-stone-500 sticky top-0 z-10 cursor-pointer">
-                   <tr>
-                      <th className="px-4 py-3 hover:bg-stone-800 select-none" onClick={() => handleSort('id')}>姓名 (ID) <SortIcon colKey="id"/></th>
-                      <th className="px-4 py-3">职业 & 雇主</th>
-                      <th className="px-4 py-3 text-right hover:bg-stone-800 select-none" onClick={() => handleSort('production')}>日产出 <SortIcon colKey="production"/></th>
-                      <th className="px-4 py-3 text-right hover:bg-stone-800 select-none" onClick={() => handleSort('cash')}>现金 <SortIcon colKey="cash"/></th>
-                   </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-800">
-                   {filteredResidents.map(res => (
-                      <tr key={res.id} className={`hover:bg-stone-800 ${res.isPlayer ? 'bg-blue-950/20' : ''}`}>
-                         <td className="px-4 py-3 font-medium text-white">
-                            <div className="flex items-center gap-2">
-                                {res.name}
-                                {res.isPlayer && <span className="bg-blue-600 text-white text-[10px] px-1.5 rounded">YOU</span>}
-                                {res.id === mayorId && <Crown size={12} className="text-amber-500"/>}
-                            </div>
-                         </td>
-                         <td className="px-4 py-3">
-                            <div className="flex flex-col">
-                                <span className={`w-fit px-2 py-0.5 rounded text-xs mb-1 flex items-center gap-1 ${
-                                    res.job === 'UNEMPLOYED' ? 'bg-red-900/50 text-red-400' :
-                                    res.job === 'FARMER' ? 'bg-stone-700 text-stone-300' :
-                                    res.job === 'WORKER' ? 'bg-emerald-900/50 text-emerald-400' :
-                                    res.job === 'FINANCIER' ? 'bg-purple-900/50 text-purple-300' :
-                                    'bg-blue-900/50 text-blue-200'
-                                }`}>
-                                    {res.job === 'FINANCIER' && <TrendingUp size={10}/>}
-                                    {getJobLabel(res.job)}
+          <div className="border border-stone-800 rounded-lg overflow-hidden bg-stone-950">
+             {/* List Header */}
+             <div className="grid grid-cols-12 text-xs uppercase bg-stone-900 text-stone-500 font-bold border-b border-stone-800 select-none">
+                <div className="col-span-4 px-4 py-3 cursor-pointer hover:bg-stone-800 flex items-center gap-1" onClick={() => handleSort('id')}>
+                    姓名 (ID) <SortIcon colKey="id"/>
+                </div>
+                <div className="col-span-4 px-4 py-3">
+                    职业 & 雇主
+                </div>
+                <div className="col-span-2 px-4 py-3 text-right cursor-pointer hover:bg-stone-800 flex items-center justify-end gap-1" onClick={() => handleSort('production')}>
+                    日产出 <SortIcon colKey="production"/>
+                </div>
+                <div className="col-span-2 px-4 py-3 text-right cursor-pointer hover:bg-stone-800 flex items-center justify-end gap-1" onClick={() => handleSort('cash')}>
+                    现金 <SortIcon colKey="cash"/>
+                </div>
+             </div>
+             
+             {/* List Body */}
+             <div className="h-[500px] overflow-y-auto custom-scrollbar">
+               {filteredResidents.map(res => (
+                   <div key={res.id} className={`grid grid-cols-12 items-center hover:bg-stone-800 border-b border-stone-800 ${res.isPlayer ? 'bg-blue-950/20' : ''}`}>
+                         <div className="col-span-4 px-4 py-2 font-medium text-white flex items-center gap-2 overflow-hidden">
+                            <span className="truncate">{res.name}</span>
+                            {res.isPlayer && <span className="bg-blue-600 text-white text-[10px] px-1.5 rounded shrink-0">YOU</span>}
+                            {res.id === mayorId && <Crown size={12} className="text-amber-500 shrink-0"/>}
+                         </div>
+                         <div className="col-span-4 px-4 py-2 flex flex-col justify-center">
+                             <span className={`w-fit px-2 py-0.5 rounded text-xs mb-1 flex items-center gap-1 ${
+                                res.job === 'UNEMPLOYED' ? 'bg-red-900/50 text-red-400' :
+                                res.job === 'FARMER' ? 'bg-stone-700 text-stone-300' :
+                                res.job === 'WORKER' ? 'bg-emerald-900/50 text-emerald-400' :
+                                res.job === 'FINANCIER' ? 'bg-purple-900/50 text-purple-300' :
+                                'bg-blue-900/50 text-blue-200'
+                            }`}>
+                                {res.job === 'FINANCIER' && <TrendingUp size={10}/>}
+                                {getJobLabel(res.job)}
+                            </span>
+                            {res.employerId && (
+                                <span className="text-[10px] text-stone-500 flex items-center gap-1 truncate">
+                                    <Briefcase size={10}/> {getEmployerName(res.employerId)}
                                 </span>
-                                {res.employerId && (
-                                    <span className="text-[10px] text-stone-500 flex items-center gap-1">
-                                        <Briefcase size={10}/> {getEmployerName(res.employerId)}
-                                    </span>
-                                )}
-                            </div>
-                         </td>
-                         <td className="px-4 py-3 text-right">
+                            )}
+                         </div>
+                         <div className="col-span-2 px-4 py-2 text-right flex items-center justify-end">
                              {res.calculatedProduction > 0 ? (
                                 <span className="text-emerald-500 font-mono text-xs">
-                                   +{res.calculatedProduction.toFixed(2)} / 天
+                                   +{res.calculatedProduction.toFixed(2)}
                                 </span>
                              ) : (
                                 <span className="text-stone-600 text-xs">-</span>
                              )}
-                         </td>
-                         <td className="px-4 py-3 text-right font-mono text-emerald-500">
+                         </div>
+                         <div className="col-span-2 px-4 py-2 text-right font-mono text-emerald-500 flex items-center justify-end">
                             {Math.floor(res.cash).toLocaleString()} oz
-                         </td>
-                      </tr>
-                   ))}
-                </tbody>
-             </table>
+                         </div>
+                    </div>
+               ))}
+             </div>
           </div>
       </Card>
     </div>

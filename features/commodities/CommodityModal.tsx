@@ -5,6 +5,7 @@ import { useGameStore } from '../../shared/store/useGameStore';
 import { Card, Button } from '../../shared/components';
 import { KLineChart } from '../../shared/components/charts/KLineChart';
 import { X, TrendingUp } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface CommodityModalProps {
   item: ResourceItem | ProductItem;
@@ -23,8 +24,19 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
   const isRising = change >= 0;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-[900px] bg-stone-900 border border-stone-700 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+    >
+      <motion.div 
+        initial={{ y: 50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 50, opacity: 0 }}
+        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+        className="w-[900px] bg-stone-900 border border-stone-700 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+      >
           {/* Header */}
           <div className="p-4 border-b border-stone-800 flex justify-between items-center bg-stone-900">
              <div className="flex items-center gap-3">
@@ -62,7 +74,6 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
                  </div>
                  
                  {/* Asks (Sells) - Red - Sorted Ascending (Lowest Price at bottom) */}
-                 {/* We want to show lowest sells closer to the center spread */}
                  <div className="flex-1 overflow-y-auto flex flex-col-reverse custom-scrollbar border-b border-stone-800">
                     {book.asks.slice(0, 15).reverse().map((order, i) => (
                         <div key={order.id} className="flex justify-between px-2 py-1 text-xs font-mono hover:bg-stone-800">
@@ -115,7 +126,7 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
                   </Button>
               </div>
           </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
