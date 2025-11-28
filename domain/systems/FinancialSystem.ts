@@ -1,4 +1,5 @@
 
+
 import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType, FlowStats, GameContext } from '../../shared/types';
 import { Transaction } from '../utils/Transaction';
 
@@ -102,6 +103,9 @@ export class FinancialSystem {
     // Rough Nominal GDP
     const gdp = totalConsumptionValue + govSpending + (totalProductionValue - totalConsumptionValue); // Basic Value Added approx
 
+    // Calculate Money Supply (M0)
+    const M0 = state.economicOverview.totalResidentCash + state.economicOverview.totalCorporateCash + state.economicOverview.totalCityCash + state.economicOverview.totalFundCash;
+
     state.macroHistory.push({
         day: state.day,
         gdp: parseFloat(gdp.toFixed(2)),
@@ -109,7 +113,8 @@ export class FinancialSystem {
         investment: 0, 
         cpi: parseFloat(cpi.toFixed(2)),
         inflation: parseFloat(inflation.toFixed(4)),
-        unemployment: parseFloat(unemploymentRate.toFixed(4))
+        unemployment: parseFloat(unemploymentRate.toFixed(4)),
+        moneySupply: parseFloat(M0.toFixed(0))
     });
 
     if (state.macroHistory.length > 365) state.macroHistory.shift();

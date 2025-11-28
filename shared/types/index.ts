@@ -382,6 +382,7 @@ export interface MacroMetric {
   cpi: number;         // Consumer Price Index
   inflation: number;   // Daily inflation rate
   unemployment: number;// Unemployment rate (0-1)
+  moneySupply?: number; // M0 (Total System Gold)
 }
 
 export interface AchievementState {

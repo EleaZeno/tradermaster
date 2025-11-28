@@ -106,6 +106,15 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
   addEvent: (event) => set((state) => {
     state.gameState.events.unshift(event);
     if (state.gameState.events.length > 5) state.gameState.events.pop();
+
+    if (event.type === 'NEWS' && state.gameState.settings.notifications.news) {
+        state.gameState.notifications.push({
+            id: `news_${Date.now()}`,
+            message: `📰 ${event.headline}`,
+            type: event.impactType === 'BAD' ? 'error' : event.impactType === 'GOOD' ? 'success' : 'info',
+            timestamp: Date.now()
+        });
+    }
   }),
 
   updateChatHistory: (history) => set((state) => {

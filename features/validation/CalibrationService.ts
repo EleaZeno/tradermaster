@@ -1,4 +1,5 @@
 
+
 import { GameState, MacroMetric } from '../../shared/types';
 
 export interface StylizedFactResult {
@@ -129,6 +130,65 @@ export class CalibrationService {
           label: "Wealth vs MPC",
           description: "Marginal Propensity to Consume by Wealth Quartile.",
           chartData: data
+      };
+  }
+
+  // Fact 5: Okun's Law
+  static checkOkunsLaw(history: MacroMetric[]): StylizedFactResult {
+      if (history.length < 20) return { passed: false, score: 0, label: "Insufficient Data", description: "Need more data." };
+      
+      // Real GDP = Nominal GDP / CPI
+      const realGdp = history.map(h => h.gdp / (h.cpi || 1));
+      const realGdpGrowth = this.calculateGrowth(realGdp);
+      
+      const u = history.map(h => h.unemployment);
+      const uChange = [];
+      // Calculate change in unemployment rate
+      for(let i=1; i<u.length; i++) uChange.push(u[i] - u[i-1]);
+      
+      // Calculate correlation between Real GDP Growth and Change in Unemployment
+      const correlation = this.calculateCorrelation(realGdpGrowth, uChange);
+      
+      // Expect negative correlation (Higher growth -> Lower unemployment)
+      const passed = correlation < -0.2; 
+      
+      // Prepare chart data (scatter plot)
+      const chartData = realGdpGrowth.map((g, i) => ({ x: g * 100, y: uChange[i] * 100 }));
+
+      return {
+          passed,
+          score: parseFloat(correlation.toFixed(2)),
+          label: "Okun's Law",
+          description: `Correlation between Real GDP Growth and Change in Unemployment. Expected < -0.2. Current: ${correlation.toFixed(2)}`,
+          chartData
+      };
+  }
+
+  // Fact 6: Quantity Theory of Money (Long-run neutrality)
+  static checkQuantityTheoryOfMoney(history: MacroMetric[]): StylizedFactResult {
+      if (history.length < 30) return { passed: false, score: 0, label: "Insufficient Data", description: "Need more data." };
+      
+      // Correlation between Money Supply Growth and Inflation
+      const moneySupply = history.map(h => h.moneySupply || 0);
+      const mGrowth = this.calculateGrowth(moneySupply);
+      
+      // Inflation is already growth of CPI
+      // calculateGrowth drops index 0, so we align inflation array
+      const inflation = history.slice(1).map(h => h.inflation);
+
+      const correlation = this.calculateCorrelation(mGrowth, inflation);
+      
+      // Expect positive correlation in long run
+      const passed = correlation > 0.3;
+
+      const chartData = mGrowth.map((m, i) => ({ x: m * 100, y: inflation[i] * 100 }));
+
+      return {
+          passed,
+          score: parseFloat(correlation.toFixed(2)),
+          label: "QTM (Monetarism)",
+          description: `Correlation between Money Growth and Inflation. Expected > 0.3. Current: ${correlation.toFixed(2)}`,
+          chartData
       };
   }
 

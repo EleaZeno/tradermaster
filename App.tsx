@@ -105,7 +105,7 @@ const App: React.FC = () => {
   const SidebarContent = () => (
     <>
         <AnimatePresence>
-            {latestNewsEvent && (gameState.day - latestNewsEvent.turnCreated < 5) && (
+            {latestNewsEvent && (gameState.day - latestNewsEvent.turnCreated < 5) && gameState.settings.notifications.news && (
                 <motion.div 
                     initial={{ opacity: 0, y: -20, scale: 0.9 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
