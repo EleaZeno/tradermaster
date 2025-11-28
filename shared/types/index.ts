@@ -1,5 +1,4 @@
 
-
 import { ReactNode } from 'react';
 
 export enum ResourceType {
@@ -99,17 +98,21 @@ export interface YieldCurve {
 }
 
 export interface Bank {
-  reserves: number;
+  reserves: number; // Central Bank Reserves (High Powered Money)
+  moneySupply: number; // M2 (Broad Money)
+  reserveRatio: number; // Requirement (e.g. 0.1)
+  creditMultiplier: number; // Current Multiplier
+  
   totalDeposits: number;
   totalLoans: number;
   depositRate: number; // Base Rate
   loanRate: number;    // Base Rate
-  yieldCurve: YieldCurve; // New: Term structure
-  targetInflation: number; // Annualized target (e.g., 0.02)
-  targetUnemployment: number; // Target rate (e.g., 0.05)
+  yieldCurve: YieldCurve; 
+  targetInflation: number; 
+  targetUnemployment: number; 
   loans: Loan[];
   deposits: Deposit[];
-  history: { day: number; reserves: number; rates: number; inflation: number }[];
+  history: { day: number; reserves: number; rates: number; inflation: number; m2: number }[];
 }
 
 export interface Resident {
@@ -120,8 +123,8 @@ export interface Resident {
   wealth: number; 
   cash: number;   
   job: 'UNEMPLOYED' | 'FARMER' | 'WORKER' | 'EXECUTIVE' | 'MAYOR' | 'DEPUTY_MAYOR' | 'UNION_LEADER' | 'FINANCIER'; 
-  skill: SkillLevel; // New
-  xp: number;        // New: 0-100
+  skill: SkillLevel; 
+  xp: number;        
   employerId?: string; 
   salary: number; 
   intelligence: number; 
@@ -129,9 +132,14 @@ export interface Resident {
   happiness: number;
   livingStandard: LivingStandard; 
   timePreference: number; 
-  // Economic Parameters
+  
+  // Utility Preferences (Cobb-Douglas weights)
+  preferenceWeights: {
+      [key in IndustryType]?: number; // Alpha for goods
+  } & { savings: number }; // Alpha for future consumption
+  
   reservationWage: number;
-  propensityToConsume: number; // 0.0 to 1.0 (MPC)
+  propensityToConsume: number; 
   needs: Record<string, number>; 
   inventory: Partial<Record<string, number>>;
   portfolio: Record<string, number>; 
@@ -150,7 +158,7 @@ export interface PopulationState {
   financiers: number;
   averageWage: number;
   averageHappiness: number;
-  consumerSentiment: number; // New: 0-100
+  consumerSentiment: number; 
   demographics: {
       births: number;
       deaths: number;
@@ -202,9 +210,9 @@ export interface Company {
   id: string;
   name: string;
   description?: string;
-  age: number; // New
-  stage: LifecycleStage; // New
-  kpis: CompanyKPIs; // New
+  age: number; 
+  stage: LifecycleStage; 
+  kpis: CompanyKPIs; 
   productionLines: ProductionLine[];
   cash: number;
   sharePrice: number;
@@ -364,7 +372,7 @@ export interface EconomicSnapshot {
   totalCorporateCash: number;
   totalFundCash: number;
   totalCityCash: number; 
-  totalSystemGold: number; 
+  totalSystemGold: number; // M2
   totalInventoryValue: number; 
   totalMarketCap: number; 
   totalFuturesNotional: number; 
@@ -408,13 +416,17 @@ export interface OrderBook {
 
 export interface MacroMetric {
   day: number;
-  gdp: number;         // Nominal GDP estimate
-  consumption: number; // Total consumption Value
-  investment: number;  // Est investment
-  cpi: number;         // Consumer Price Index
-  inflation: number;   // Daily inflation rate
-  unemployment: number;// Unemployment rate (0-1)
-  moneySupply?: number; // M0 (Total System Gold)
+  gdp: number;         // Nominal GDP = C + I + G + NetX
+  components: {        // New: Breakdown
+      c: number;
+      i: number;
+      g: number;
+      netX: number;
+  };
+  cpi: number;         
+  inflation: number;   
+  unemployment: number;
+  moneySupply?: number; // M2
 }
 
 export interface AchievementState {
@@ -493,6 +505,13 @@ export interface FlowStatsData {
 }
 
 export type FlowStats = Record<IndustryType, FlowStatsData>;
+
+// New: Accumulator for GDP calculation within a tick
+export interface GDPFlowAccumulator {
+    C: number; // Consumption
+    I: number; // Investment (Capex + Inventory delta)
+    G: number; // Government Spending
+}
 
 export type TransactionParty = Resident | Company | CityTreasury | 'TREASURY' | 'MARKET' | 'GATHERERS';
 

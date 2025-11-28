@@ -18,7 +18,7 @@ export class CalibrationService {
     if (history.length < 10) return { passed: false, score: 0, label: "Insufficient Data", description: "Need more data." };
 
     const gdpGrowth = this.calculateGrowth(history.map(h => h.gdp));
-    const consGrowth = this.calculateGrowth(history.map(h => h.consumption));
+    const consGrowth = this.calculateGrowth(history.map(h => h.components?.c || 0));
 
     const gdpVol = this.calculateStdDev(gdpGrowth);
     const consVol = this.calculateStdDev(consGrowth);

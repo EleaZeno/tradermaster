@@ -1,5 +1,4 @@
 
-
 import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank } from './types';
 import { GAME_CONFIG } from './config';
 
@@ -21,7 +20,8 @@ const generateResidents = (count: number): Resident[] => {
     happiness: 100, inventory: { [ResourceType.GRAIN]: 10 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'BASIC', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
     landTokens: 0,
-    reservationWage: 1.5, propensityToConsume: 0.8
+    reservationWage: 1.5, propensityToConsume: 0.8,
+    preferenceWeights: { [ProductType.BREAD]: 0.5, [ResourceType.GRAIN]: 0.4, savings: 0.1 }
   });
 
   residents.push({
@@ -33,7 +33,8 @@ const generateResidents = (count: number): Resident[] => {
     happiness: 100, inventory: { [ProductType.BREAD]: 5 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'LUXURY', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 },
     landTokens: 5,
-    reservationWage: 5.0, propensityToConsume: 0.9 
+    reservationWage: 5.0, propensityToConsume: 0.9,
+    preferenceWeights: { [ProductType.BREAD]: 0.7, [ResourceType.GRAIN]: 0.1, savings: 0.2 }
   });
 
   residents.push({
@@ -45,65 +46,24 @@ const generateResidents = (count: number): Resident[] => {
     happiness: 90, inventory: { [ProductType.BREAD]: 3 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'COMFORT', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 },
     landTokens: 2,
-    reservationWage: 3.0, propensityToConsume: 0.85
+    reservationWage: 3.0, propensityToConsume: 0.85,
+    preferenceWeights: { [ProductType.BREAD]: 0.6, [ResourceType.GRAIN]: 0.2, savings: 0.2 }
   });
 
-  residents.push({
-    id: 'res_ceo_grain', name: names[3], age: 50, isPlayer: false,
-    wealth: 50, cash: 80,
-    job: 'EXECUTIVE', employerId: 'comp_grain', salary: 2.5,
-    skill: 'EXPERT', xp: 400,
-    influence: 80, intelligence: 85, leadership: 80, politicalStance: 'CAPITALIST',
-    happiness: 90, inventory: {}, portfolio: {}, futuresPositions: [],
-    livingStandard: 'COMFORT', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
-    landTokens: 0,
-    reservationWage: 2.5, propensityToConsume: 0.7 
-  });
-
-  residents.push({
-    id: 'res_union_grain', name: names[4], age: 45, isPlayer: false,
-    wealth: 30, cash: 60,
-    job: 'WORKER', employerId: 'comp_grain', salary: 0, 
-    skill: 'SKILLED', xp: 250,
-    influence: 90, intelligence: 60, leadership: 90, politicalStance: 'SOCIALIST',
-    happiness: 95, inventory: {}, portfolio: {}, futuresPositions: [],
-    livingStandard: 'BASIC', timePreference: 0.4, needs: { [ResourceType.GRAIN]: 100 },
-    landTokens: 1,
-    reservationWage: 1.2, propensityToConsume: 0.95 
-  });
-
-  residents.push({
-    id: 'res_ceo_food', name: names[5], age: 48, isPlayer: false,
-    wealth: 50, cash: 80,
-    job: 'EXECUTIVE', employerId: 'comp_food', salary: 2.5,
-    skill: 'EXPERT', xp: 350,
-    influence: 80, intelligence: 85, leadership: 80, politicalStance: 'CAPITALIST',
-    happiness: 90, inventory: {}, portfolio: {}, futuresPositions: [],
-    livingStandard: 'COMFORT', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
-    landTokens: 0,
-    reservationWage: 2.5, propensityToConsume: 0.7 
-  });
-
-  residents.push({
-    id: 'res_union_food', name: names[6], age: 42, isPlayer: false,
-    wealth: 30, cash: 60,
-    job: 'WORKER', employerId: 'comp_food', salary: 0,
-    skill: 'SKILLED', xp: 180,
-    influence: 90, intelligence: 60, leadership: 90, politicalStance: 'SOCIALIST',
-    happiness: 95, inventory: {}, portfolio: {}, futuresPositions: [],
-    livingStandard: 'BASIC', timePreference: 0.4, needs: { [ResourceType.GRAIN]: 100 },
-    landTokens: 0,
-    reservationWage: 1.2, propensityToConsume: 0.95
-  });
-
+  // Basic Residents
   let farmersCount = 0;
-  for (let i = 7; i < count; i++) {
+  for (let i = 3; i < count; i++) {
     const intelligence = 60 + Math.floor(Math.random() * 40); 
     let job: Resident['job'] = 'FARMER';
     let employerId: string | undefined = undefined;
     let land = 0;
-
-    if (i === 7 || i === 8) { job = 'WORKER'; employerId = 'comp_grain'; }
+    
+    // Assign specific jobs for initial setup
+    if (i === 3) { job = 'EXECUTIVE'; employerId = 'comp_grain'; }
+    else if (i === 4) { job = 'WORKER'; employerId = 'comp_grain'; }
+    else if (i === 5) { job = 'EXECUTIVE'; employerId = 'comp_food'; }
+    else if (i === 6) { job = 'WORKER'; employerId = 'comp_food'; }
+    else if (i === 7 || i === 8) { job = 'WORKER'; employerId = 'comp_grain'; }
     else if (i === 9 || i === 10) { job = 'WORKER'; employerId = 'comp_food'; }
     else { 
         farmersCount++;
@@ -118,7 +78,7 @@ const generateResidents = (count: number): Resident[] => {
       wealth: 30, cash: 50, 
       job: job, employerId: employerId,
       salary: 0, 
-      skill: 'NOVICE', xp: Math.floor(Math.random() * 50),
+      skill: i < 7 ? 'SKILLED' : 'NOVICE', xp: Math.floor(Math.random() * 50),
       influence: 5, intelligence: intelligence, leadership: 5 + Math.floor(Math.random() * 50),
       politicalStance: 'CENTRIST',
       happiness: 70, inventory: { [ResourceType.GRAIN]: 5 }, portfolio: {}, futuresPositions: [],
@@ -127,7 +87,8 @@ const generateResidents = (count: number): Resident[] => {
       needs: { [ResourceType.GRAIN]: 100 },
       landTokens: land,
       reservationWage: 1.0 + (Math.random() * 0.5),
-      propensityToConsume: 0.9
+      propensityToConsume: 0.9,
+      preferenceWeights: { [ProductType.BREAD]: 0.5, [ResourceType.GRAIN]: 0.4, savings: 0.1 }
     });
   }
 
@@ -214,10 +175,13 @@ export const INITIAL_CITY_TREASURY: CityTreasury = {
 
 export const INITIAL_BANK: Bank = {
   reserves: 2000,
+  moneySupply: 2000,
+  reserveRatio: 0.1,
+  creditMultiplier: 1.0,
   totalDeposits: 0,
   totalLoans: 0,
-  depositRate: 0.001, // 0.1% daily
-  loanRate: 0.003,    // 0.3% daily
+  depositRate: 0.001, 
+  loanRate: 0.003,    
   yieldCurve: { rate1d: 0.001, rate30d: 0.003, rate365d: 0.005 },
   targetInflation: 0.02, 
   targetUnemployment: 0.05,
@@ -289,7 +253,7 @@ export const INITIAL_COMPANIES: Company[] = [
     kpis: { roe: 0.1, roa: 0.08, roi: 0.12, leverage: 0.2, marketShare: 0.6 },
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.05, 20),
-    type: CompanyType.COOPERATIVE, wageStructure: WageStructure.FLAT, ceoId: 'res_ceo_grain', isBankrupt: false
+    type: CompanyType.COOPERATIVE, wageStructure: WageStructure.FLAT, ceoId: 'res_3', isBankrupt: false
   },
   {
     id: 'comp_food', name: '大众食品厂',
@@ -317,13 +281,12 @@ export const INITIAL_COMPANIES: Company[] = [
     kpis: { roe: 0.15, roa: 0.1, roi: 0.2, leverage: 0.5, marketShare: 0.4 },
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.1, 20),
-    type: CompanyType.CORPORATION, wageStructure: WageStructure.HIERARCHICAL, ceoId: 'res_ceo_food', isBankrupt: false
+    type: CompanyType.CORPORATION, wageStructure: WageStructure.HIERARCHICAL, ceoId: 'res_5', isBankrupt: false
   }
 ];
 
 export const INITIAL_FUNDS: Fund[] = [];
 
-// Helper to create empty books
 export const createEmptyBook = (price: number): OrderBook => ({
     bids: [], asks: [], lastPrice: price, history: []
 });
@@ -352,7 +315,7 @@ export const INITIAL_STATE: GameState = {
     events: [],
     netWorthHistory: [{ day: 1, value: GAME_CONFIG.INITIAL_PLAYER_CASH }],
     macroHistory: [],
-    chatHistory: [{ role: 'model', text: '微型社会模拟 v7.0 已启动。\n系统已接入人口动态、Yield Curve 与 公司生命周期模型。', timestamp: Date.now() }],
+    chatHistory: [{ role: 'model', text: '微型社会模拟 v8.0 (GE Mode) 已启动。\n系统已接入 GDP 流动核算与银行信贷创造机制。', timestamp: Date.now() }],
     logs: ["🏗️ 系统初始化完成"],
     economicOverview: {
         totalResidentCash: 0, totalCorporateCash: 0, totalFundCash: 0, totalCityCash: 0, totalSystemGold: 0,
@@ -360,8 +323,6 @@ export const INITIAL_STATE: GameState = {
         inventoryAudit: {}
     },
     market: market,
-    
-    // New Features
     achievements: [],
     notifications: [],
     settings: {
@@ -372,7 +333,6 @@ export const INITIAL_STATE: GameState = {
             news: false
         }
     },
-    
     policyOverrides: {
         interestRate: null,
         moneyPrinter: 0,

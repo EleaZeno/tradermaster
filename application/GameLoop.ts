@@ -1,6 +1,5 @@
 
-
-import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident } from '../shared/types';
+import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident, GDPFlowAccumulator } from '../shared/types';
 import { LaborService } from '../domain/labor/LaborService';
 import { ProductionService } from '../domain/company/ProductionService';
 import { ConsumerService } from '../domain/consumer/ConsumerService';
@@ -43,29 +42,24 @@ export const processGameTick = (gameState: GameState): void => {
     }
 
     // --- Core Economic Cycle (Closed Loop) ---
-    // 1. Price decides consumption (ConsumerService)
-    // 2. Demand -> Production adjustment (ProductionService)
-    // 3. Production -> Labor Demand (LaborService/ProductionService)
-    // 4. Labor Market -> Wage (LaborService)
-    // 5. Wage -> Income -> Consumption Budget (ConsumerService)
-    // 6. Income -> Profit -> Investment (ProductionService/StockMarketService)
-    // 7. Investment -> Capital -> Next Output (ProductionService)
-    // 8. Price Adjustment (MarketService/ProductionService)
-    // 9. CPI -> Inflation (StockMarketService)
-    // 10. Money Supply (BankingService)
+    // A General Equilibrium Tick
     
     if (currentTick % rates.CORE_ECO === 0 && context) {
         resetDailyCounters(gameState); 
         
-        // --- Policy Shock: Helicopter Money (Quantitative Easing) ---
+        // GDP Flow Accumulator for this day
+        const gdpFlow: GDPFlowAccumulator = { C: 0, I: 0, G: 0 };
+        
+        // --- Policy Shock: Helicopter Money ---
         if (gameState.policyOverrides.moneyPrinter > 0) {
             const amount = gameState.policyOverrides.moneyPrinter / gameState.population.residents.length;
             gameState.population.residents.forEach(r => {
                 r.cash += amount;
             });
-            // Also print to treasury to prevent deficit
+            // Treat as Gov Spending (G) or Transfer (neg Tax), lets count as G boost to supply
             gameState.cityTreasury.cash += gameState.policyOverrides.moneyPrinter;
             gameState.economicOverview.totalSystemGold += (gameState.policyOverrides.moneyPrinter * 2);
+            gdpFlow.G += gameState.policyOverrides.moneyPrinter;
         }
         // -----------------------------------------------------------
 
@@ -88,35 +82,41 @@ export const processGameTick = (gameState: GameState): void => {
         const grainPriceBenchmark = Math.max(0.1, gameState.resources[ResourceType.GRAIN].currentPrice);
         const wagePressureModifier = getEventModifier('WAGE');
 
-        // Order matters for "Circular Flow"
-        // 1. Labor Market acts first (Wage Setting) based on expectations (Inflation)
-        LaborService.process(gameState, context, grainPriceBenchmark, wagePressureModifier);
+        // 1. Labor Market acts first (Wage Setting)
+        // Wages paid by Gov contribute to G
+        LaborService.process(gameState, context, grainPriceBenchmark, wagePressureModifier, gdpFlow);
         
-        // 2. Production (Hiring + Output + Sales)
-        ProductionService.process(gameState, context, flowStats, getEventModifier);
+        // 2. Production (Hiring + Output + Sales + Investment)
+        // Tracks I (Investment in Lines/Inventory)
+        ProductionService.process(gameState, context, flowStats, getEventModifier, gdpFlow);
         
-        // 3. Consumption (Buying goods using income from Labor/Production steps)
-        ConsumerService.process(gameState, context, flowStats);
+        // 3. Consumption (Utility Maximization)
+        // Tracks C (Consumption)
+        ConsumerService.process(gameState, context, flowStats, gdpFlow);
         
+        // 4. Banking (Credit Creation)
+        // Credit creation happens continuously but we reconcile here
+        if (currentTick % rates.MACRO === 0) {
+             BankingService.process(gameState, context);
+        }
+
         // --- Demographics & Sentiment ---
         updateDemographics(gameState);
-        updateSentiment(gameState);
+        updateSentiment(gameState, gdpFlow); // Use flow Gdp to update sentiment
         updateCompanyLifecycle(gameState);
         
         gameState.day += 1;
         updatePlayerStatus(gameState);
         
+        // 5. Audit & GDP Recording
         if (currentTick % rates.MACRO === 0) {
-             StockMarketService.runAudit(gameState, flowStats);
+             StockMarketService.runAudit(gameState, flowStats, gdpFlow);
         }
     }
 
     if (currentTick % rates.MACRO === 0 && context) {
-        BankingService.process(gameState, context);
         StockMarketService.processStockMarket(gameState);
         
-        // Fiscal Policy: Only run automatic if Tax Multiplier is default (1.0)
-        // If manually modified, we assume manual control and just apply the multiplier to base rates
         if (gameState.policyOverrides.taxMultiplier === 1.0) {
             StockMarketService.manageFiscalPolicy(gameState, context);
         } else {
@@ -171,20 +171,13 @@ const updatePlayerStatus = (gameState: GameState): void => {
     }
 };
 
-// --- New Helpers ---
-
 const updateDemographics = (state: GameState) => {
-    if (state.day % 30 !== 0) return; // Monthly check
+    if (state.day % 30 !== 0) return; 
 
     const pop = state.population;
-    
-    // Policy Override: Migration Multiplier
     const multiplier = state.policyOverrides.migrationRate;
     
-    // Births (Migration)
-    // Base probability boosted by multiplier
     if (pop.averageHappiness > (80 / Math.max(0.1, multiplier)) && pop.total < 150) {
-        // New Immigrant
         const id = `res_imm_${state.day}_${Math.random().toString(36).substr(2,4)}`;
         state.logs.unshift(`👶 新移民加入: 社区迎来了一位新成员`);
         state.population.residents.push({
@@ -194,13 +187,13 @@ const updateDemographics = (state: GameState) => {
             influence: 0, intelligence: 50 + Math.random()*30, leadership: 10,
             politicalStance: 'CENTRIST', happiness: 70, inventory: {}, portfolio: {}, futuresPositions: [],
             livingStandard: 'SURVIVAL', timePreference: 0.5, needs: {}, landTokens: 0,
-            reservationWage: 1.0, propensityToConsume: 0.9
+            reservationWage: 1.0, propensityToConsume: 0.9,
+            preferenceWeights: { [ProductType.BREAD]: 0.6, [ResourceType.GRAIN]: 0.3, savings: 0.1 }
         });
         pop.total++;
         pop.demographics.immigration++;
     }
 
-    // Deaths (Departures) - Reduced by high multiplier (happy place)
     const deathThreshold = 30 * Math.min(1, 1/multiplier);
     if (pop.averageHappiness < deathThreshold && pop.total > 10) {
         const unhappy = pop.residents.filter(r => !r.isPlayer && r.happiness < 20);
@@ -214,30 +207,35 @@ const updateDemographics = (state: GameState) => {
     }
 };
 
-const updateSentiment = (state: GameState) => {
+const updateSentiment = (state: GameState, gdpFlow: GDPFlowAccumulator) => {
     const history = state.macroHistory;
     if (history.length < 2) return;
     
     const last = history[history.length - 1];
     const prev = history[history.length - 2];
     
-    const gdpGrowth = prev.gdp > 0 ? (last.gdp - prev.gdp)/prev.gdp : 0;
+    // Real time growth check
+    const currentGdp = gdpFlow.C + gdpFlow.I + gdpFlow.G;
+    const prevGdp = last.gdp || 1;
+    const gdpGrowth = (currentGdp - prevGdp) / prevGdp;
+    
     const inflation = last.inflation;
     const unemployment = last.unemployment;
     
-    // Sentiment Formula
-    // Base 50 + Growth*100 - Inflation*200 - Unemployment*100
     let sentiment = 50 + (gdpGrowth * 100) - (inflation * 200) - (unemployment * 100);
     sentiment = Math.max(0, Math.min(100, sentiment));
     
     state.population.consumerSentiment = parseFloat(sentiment.toFixed(1));
     
-    // Propensity Update
+    // Propensity Update based on Sentiment
     state.population.residents.forEach(r => {
-        // Base propensity modified by sentiment
         const base = 0.8;
-        const sentimentFactor = (sentiment - 50) / 200; // -0.25 to +0.25
+        const sentimentFactor = (sentiment - 50) / 200; 
         r.propensityToConsume = Math.max(0.1, Math.min(1.0, base + sentimentFactor));
+        // Also update preference for savings
+        if (r.preferenceWeights) {
+            r.preferenceWeights.savings = 1.0 - r.propensityToConsume;
+        }
     });
 };
 
@@ -246,11 +244,10 @@ const updateCompanyLifecycle = (state: GameState) => {
         if (c.isBankrupt) return;
         c.age += 1;
         
-        // Stage Transitions
         if (c.stage === 'STARTUP') {
             if (c.age > GAME_CONFIG.LIFECYCLE.STARTUP_MAX_AGE) {
                 if (c.lastProfit > 0) c.stage = 'GROWTH';
-                else c.stage = 'DECLINE'; // Failed startup
+                else c.stage = 'DECLINE';
                 state.logs.unshift(`🏢 ${c.name} 进入 ${c.stage} 阶段`);
             }
         } else if (c.stage === 'GROWTH') {
@@ -265,16 +262,15 @@ const updateCompanyLifecycle = (state: GameState) => {
             }
         }
         
-        // Update KPIs
         const equity = (c.totalShares * c.sharePrice);
-        const assets = c.cash + (c.landTokens||0)*100; // Simplified assets
+        const assets = c.cash + (c.landTokens||0)*100;
         
         c.kpis = {
             roe: equity > 0 ? c.lastProfit / equity : 0,
             roa: assets > 0 ? c.lastProfit / assets : 0,
-            roi: 0.1, // Placeholder
+            roi: 0.1, 
             leverage: equity > 0 ? (assets - equity) / equity : 0,
-            marketShare: 0 // Would need global volume to calc
+            marketShare: 0 
         };
     });
 };

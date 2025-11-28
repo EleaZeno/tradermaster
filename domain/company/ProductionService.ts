@@ -1,22 +1,26 @@
 
-
-import { GameState, ResourceType, ProductType, IndustryType, FlowStats, GameContext } from '../../shared/types';
+import { GameState, ResourceType, ProductType, IndustryType, FlowStats, GameContext, GDPFlowAccumulator } from '../../shared/types';
 import { MarketService } from '../market/MarketService';
 import { TransactionService } from '../finance/TransactionService';
 import { GAME_CONFIG } from '../../shared/config';
 
 export class ProductionService {
-  static process(gameState: GameState, context: GameContext, flowStats: FlowStats, getEventModifier: (t: string) => number): void {
-    ProductionService.processFixedCosts(gameState, context);
+  static process(
+      gameState: GameState, 
+      context: GameContext, 
+      flowStats: FlowStats, 
+      getEventModifier: (t: string) => number,
+      gdpFlow: GDPFlowAccumulator
+  ): void {
+    ProductionService.processFixedCosts(gameState, context, gdpFlow);
     ProductionService.processSpoilage(gameState, flowStats);
     ProductionService.processFarming(gameState, context, flowStats, getEventModifier);
     ProductionService.processManufacturing(gameState, context, flowStats, getEventModifier);
     ProductionService.manageSales(gameState, context);
-    ProductionService.processCapitalAllocation(gameState, context);
+    ProductionService.processCapitalAllocation(gameState, context, gdpFlow);
   }
 
-  // New: Apply fixed costs (Rent, Maintenance) regardless of production
-  private static processFixedCosts(state: GameState, context: GameContext): void {
+  private static processFixedCosts(state: GameState, context: GameContext, gdpFlow: GDPFlowAccumulator): void {
       state.companies.forEach(company => {
           if (company.isBankrupt) return;
 
@@ -27,24 +31,23 @@ export class ProductionService {
                TransactionService.transfer(company, 'TREASURY', fixedCost, { treasury: state.cityTreasury, residents: state.population.residents, context });
                company.accumulatedCosts += fixedCost;
                company.lastFixedCost = fixedCost;
+               
+               // Fixed costs paid to Govt (rent/tax) or Service sector (abstracted)
+               // If paid to Treasury, it's a transfer, not G.
+               // However, if we consider it "Service consumption" by the firm, it's intermediate consumption, not GDP.
+               // But usually "G" is spending. Transfer to Govt is Tax.
           } else {
-               // Financial distress
                company.cash = 0; 
-               // Degrade efficiency due to lack of maintenance
                company.productionLines.forEach(l => l.efficiency *= 0.95);
-               if (company.employees > 0) {
-                   // Risk of strikes or leaving if company can't pay overhead
-                   company.unionTension += 5;
-               }
+               if (company.employees > 0) company.unionTension += 5;
           }
       });
   }
 
-  private static processCapitalAllocation(state: GameState, context: GameContext): void {
+  private static processCapitalAllocation(state: GameState, context: GameContext, gdpFlow: GDPFlowAccumulator): void {
       state.companies.forEach(company => {
           if (company.isBankrupt || company.isPlayerFounded) return;
 
-          // Calculate Tobin's Q
           const marketCap = company.sharePrice * company.totalShares;
           
           let inventoryValue = 0;
@@ -61,12 +64,13 @@ export class ProductionService {
           const q = marketCap / (replacementCost || 1);
           company.tobinQ = parseFloat(q.toFixed(2));
 
-          // Investment Rule
           if (q > 1.2 && company.cash > 200) {
               const lineType = company.productionLines[0].type;
               company.cash -= 100;
+              // Investment (I): Building new capacity
+              gdpFlow.I += 100; 
+              
               company.productionLines.push({ type: lineType, isActive: true, efficiency: 0.9, allocation: 0 });
-              // Rebalance allocation
               const count = company.productionLines.length;
               company.productionLines.forEach(l => l.allocation = 1 / count);
               state.logs.unshift(`🏭 ${company.name} 扩建生产线 (Tobin's Q: ${q.toFixed(2)})`);
@@ -75,7 +79,6 @@ export class ProductionService {
   }
 
   private static manageSales(state: GameState, context: GameContext): void {
-      // 1. Farmers selling Grain
       const farmers = context.residentsByJob['FARMER'] || [];
       const grainLastPrice = state.resources[ResourceType.GRAIN].currentPrice;
 
@@ -97,14 +100,11 @@ export class ProductionService {
              }
       });
 
-      // 2. Companies selling Bread
       state.companies.forEach(c => {
           if (c.isBankrupt) return;
           const stock = c.inventory.finished[ProductType.BREAD] || 0;
           if (stock > 1) {
-               // Pricing Strategy: WAC * (1 + Markup)
                const baseCost = c.avgCost > 0 ? c.avgCost : 1.5;
-               
                const daysOfInventory = stock / Math.max(1, c.monthlySalesVolume / 30);
                let inventoryMarkupMod = 0;
                if (daysOfInventory > 10) inventoryMarkupMod = -0.1;
@@ -164,14 +164,9 @@ export class ProductionService {
     const farmers = context.residentsByJob['FARMER'] || [];
     farmers.forEach(resident => {
         const mod = getMod(ResourceType.GRAIN);
-        // Land acts as Capital (K)
         const K = resident.landTokens || 1;
-        // Intelligence acts as Productivity (A)
         const A = (resident.intelligence / 75);
-        // Labor (L) is fixed at 1 for individual farmers
         const L = 1;
-        
-        // Simple Cobb-Douglas: Y = A * K^0.5 * L^0.5
         const output = 2.0 * A * Math.pow(K, 0.5) * Math.pow(L, 0.5) * mod;
         
         resident.inventory[ResourceType.GRAIN] = (resident.inventory[ResourceType.GRAIN] || 0) + output;
@@ -193,7 +188,6 @@ export class ProductionService {
 
       let totalWageCost = 0;
 
-      // Pay Wages
       actualWorkers.forEach(worker => {
         TransactionService.transfer(company, worker, company.wageOffer, { treasury: gameState.cityTreasury, residents: gameState.population.residents, context });
         company.accumulatedCosts += company.wageOffer;
@@ -205,16 +199,13 @@ export class ProductionService {
         gameState.cityTreasury.dailyIncome += tax;
       });
 
-      // Production Lines
       company.productionLines.forEach(line => {
         if (!line.isActive) return;
         
         const mod = getMod(line.type);
-        
         const ceo = context.residentMap.get(company.ceoId);
         const ceoMod = ceo ? (1 + (ceo.leadership - 50) / 200) : 1.0;
         
-        // --- Skill-based Productivity ---
         let totalSkillProductivity = 0;
         actualWorkers.forEach(w => {
             let mult = GAME_CONFIG.LABOR.PRODUCTIVITY_MULTIPLIER.NOVICE;
@@ -223,23 +214,20 @@ export class ProductionService {
             totalSkillProductivity += mult;
         });
         
-        // Effective L (Labor)
-        const L = totalSkillProductivity; // Instead of raw count, use quality-adjusted labor
-        
+        const L = totalSkillProductivity;
         const A = line.efficiency * ceoMod * mod;
         const K = Math.max(1, company.landTokens || 1); 
-        
-        // Cobb-Douglas with Quality Adjusted Labor
         const output = 2.5 * A * Math.pow(K, 0.3) * Math.pow(L, 0.7);
 
         let materialCost = 0;
         let actualOutput = output;
         
+        // --- STRICT SUPPLY CHAIN ---
         if (line.type === ProductType.BREAD) {
             const needed = output * 0.8;
             let currentRaw = company.inventory.raw[ResourceType.GRAIN] || 0;
             
-            // Just-In-Time Procurement
+            // Auto Procurement
             if (currentRaw < needed && company.cash > 0) {
                 const book = gameState.market[ResourceType.GRAIN];
                 const bestAsk = book?.asks[0]?.price;
@@ -263,19 +251,24 @@ export class ProductionService {
                 }
             }
 
-            if (currentRaw < needed) actualOutput = currentRaw / 0.8; 
+            // Production Limit by Input Availability
+            if (currentRaw < needed) {
+                actualOutput = currentRaw / 0.8; 
+                // Supply Chain Shock! Production halted due to missing input.
+            }
+            
             const consumed = actualOutput * 0.8;
             if (consumed > 0) {
                 company.inventory.raw[ResourceType.GRAIN] = (company.inventory.raw[ResourceType.GRAIN] || 0) - consumed;
                 flowStats[ResourceType.GRAIN].consumed += consumed;
+                // Marginal Cost calculation uses Current Market Price of inputs
                 materialCost += consumed * gameState.resources[ResourceType.GRAIN].currentPrice; 
             }
         }
 
         if (actualOutput > 0) {
-            // Weighted Average Cost (WAC) Inventory Valuation
             const oldQty = company.inventory.finished[line.type] || 0;
-            const oldCost = company.avgCost; // Current average cost per unit
+            const oldCost = company.avgCost; 
             
             const marginalCostPerUnit = actualOutput > 0 ? (totalWageCost + materialCost) / actualOutput : 0;
             const totalQty = oldQty + actualOutput;

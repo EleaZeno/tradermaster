@@ -1,6 +1,5 @@
 
-
-import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType, FlowStats, GameContext } from '../../shared/types';
+import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType, FlowStats, GameContext, GDPFlowAccumulator } from '../../shared/types';
 import { TransactionService } from './TransactionService';
 
 export class StockMarketService {
@@ -14,9 +13,6 @@ export class StockMarketService {
         const eps = comp.lastProfit / comp.totalShares;
         const bookValue = comp.cash / comp.totalShares; 
         
-        // --- Advanced Valuation Model ---
-        // 1. P/E Ratio (Price to Earnings)
-        // Growth companies command higher PE
         let targetPE = 15;
         if (comp.stage === 'STARTUP') targetPE = 30;
         if (comp.stage === 'GROWTH') targetPE = 25;
@@ -24,38 +20,29 @@ export class StockMarketService {
         
         let valPE = eps > 0 ? eps * targetPE : 0;
 
-        // 2. P/B Ratio (Price to Book)
-        // Important for declining or asset-heavy firms
         let targetPB = 1.5;
         if (comp.stage === 'MATURITY') targetPB = 2.0;
         let valPB = bookValue * targetPB;
 
-        // 3. DCF (Discounted Cash Flow approximation)
-        // Cash Flow ~ lastProfit. Risk Free Rate ~ Bank Yield 365d.
-        const riskFree = state.bank.yieldCurve.rate365d * 365; // Annualized
+        const riskFree = state.bank.yieldCurve.rate365d * 365; 
         const growthRate = comp.stage === 'GROWTH' ? 0.1 : 0.02;
-        const discountRate = riskFree + 0.05; // Equity risk premium
+        const discountRate = riskFree + 0.05; 
         
         let valDCF = 0;
         if (comp.lastProfit > 0) {
              const projectedCF = comp.lastProfit * (1 + growthRate);
              valDCF = (projectedCF / (discountRate - growthRate)) / comp.totalShares;
-             // Cap DCF to prevent explosions in simulation
              valDCF = Math.min(valDCF, valPE * 3);
         }
 
-        // Weighted Target Price
-        // Startups valued more on Growth (PE/DCF)
-        // Mature/Decline valued more on Assets (PB)
         let targetPrice = 0;
         if (eps > 0) {
             targetPrice = (valPE * 0.4) + (valPB * 0.2) + (valDCF * 0.4);
         } else {
-            targetPrice = valPB; // If losing money, priced at book value
+            targetPrice = valPB; 
         }
         
-        // Apply Sentiment Modifier
-        const sentimentMod = state.population.consumerSentiment / 50; // 0.5 to 2.0
+        const sentimentMod = state.population.consumerSentiment / 50; 
         targetPrice *= sentimentMod;
 
         const smoothedPrice = (comp.sharePrice * 0.9) + (targetPrice * 0.1);
@@ -80,16 +67,13 @@ export class StockMarketService {
       this.updateStockPrices(state);
   }
 
-  static runAudit(state: GameState, flowStats: FlowStats): void {
+  static runAudit(state: GameState, flowStats: FlowStats, gdpFlow: GDPFlowAccumulator): void {
     const audit: EconomicSnapshot['inventoryAudit'] = {};
     
     const getMarketSupply = (itemId: string) => {
         const book = state.market[itemId];
         return book ? book.asks.reduce((s, o) => s + (o.remainingQuantity), 0) : 0;
     };
-
-    let totalConsumptionValue = 0;
-    let totalProductionValue = 0;
 
     ([ResourceType.GRAIN, ProductType.BREAD] as IndustryType[]).forEach(type => {
         let resCount = state.population.residents.reduce((s, r) => s + (r.inventory[type] || 0), 0);
@@ -105,10 +89,6 @@ export class StockMarketService {
             consumed: flowStats[type].consumed,
             spoiled: flowStats[type].spoiled
         };
-        
-        const price = type === ResourceType.GRAIN ? state.resources[ResourceType.GRAIN].currentPrice : state.products[ProductType.BREAD].marketPrice;
-        totalConsumptionValue += flowStats[type].consumed * price;
-        totalProductionValue += flowStats[type].produced * price;
     });
 
     const unemployedCount = state.population.residents.filter(r => r.job === 'UNEMPLOYED' || (r.job === 'FARMER' && !r.employerId)).length;
@@ -122,21 +102,25 @@ export class StockMarketService {
     const prevCpi = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].cpi : cpi;
     const inflation = prevCpi > 0 ? (cpi - prevCpi) / prevCpi : 0;
 
-    const govSpending = state.cityTreasury.dailyExpense;
-    
-    const gdp = totalConsumptionValue + govSpending + (totalProductionValue - totalConsumptionValue); 
+    // Use Accurate Flows
+    const gdp = gdpFlow.C + gdpFlow.I + gdpFlow.G;
 
+    // Approximated M2 is in bank.moneySupply, but calculate raw cash M0 too
     const M0 = state.economicOverview.totalResidentCash + state.economicOverview.totalCorporateCash + state.economicOverview.totalCityCash + state.economicOverview.totalFundCash;
 
     state.macroHistory.push({
         day: state.day,
         gdp: parseFloat(gdp.toFixed(2)),
-        consumption: parseFloat(totalConsumptionValue.toFixed(2)),
-        investment: 0, 
+        components: {
+            c: parseFloat(gdpFlow.C.toFixed(2)),
+            i: parseFloat(gdpFlow.I.toFixed(2)),
+            g: parseFloat(gdpFlow.G.toFixed(2)),
+            netX: 0
+        },
         cpi: parseFloat(cpi.toFixed(2)),
         inflation: parseFloat(inflation.toFixed(4)),
         unemployment: parseFloat(unemploymentRate.toFixed(4)),
-        moneySupply: parseFloat(M0.toFixed(0))
+        moneySupply: parseFloat(state.bank.moneySupply.toFixed(0))
     });
 
     if (state.macroHistory.length > 365) state.macroHistory.shift();
@@ -146,11 +130,10 @@ export class StockMarketService {
         totalCorporateCash: state.companies.reduce((s, c) => s + c.cash, 0),
         totalFundCash: state.funds.reduce((s, f) => s + f.cash, 0),
         totalCityCash: state.cityTreasury.cash,
-        totalSystemGold: 0, 
+        totalSystemGold: M0, 
         totalInventoryValue: 0, totalMarketCap: 0, totalFuturesNotional: 0,
         inventoryAudit: audit
     };
-    state.economicOverview.totalSystemGold = state.economicOverview.totalResidentCash + state.economicOverview.totalCorporateCash + state.economicOverview.totalCityCash + state.economicOverview.totalFundCash;
   }
 
   static manageFiscalPolicy(state: GameState, context: GameContext): void {

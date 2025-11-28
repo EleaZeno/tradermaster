@@ -18,7 +18,8 @@ const createMockState = (): GameState => ({
     mayorId: 'res_mayor',
     cityTreasury: { ...INITIAL_CITY_TREASURY, cash: 1000 },
     bank: { 
-        reserves: 1000, totalDeposits: 0, totalLoans: 0, depositRate: 0.001, loanRate: 0.003, 
+        reserves: 1000, moneySupply: 1000, reserveRatio: 0.1, creditMultiplier: 1.0,
+        totalDeposits: 0, totalLoans: 0, depositRate: 0.001, loanRate: 0.003, 
         targetInflation: 0.02, targetUnemployment: 0.05,
         yieldCurve: { rate1d: 0.001, rate30d: 0.003, rate365d: 0.005 },
         loans: [], deposits: [], history: [] 

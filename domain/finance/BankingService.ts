@@ -27,7 +27,8 @@ export class BankingService {
             day: state.day, 
             reserves: bank.reserves, 
             rates: bank.loanRate,
-            inflation: inflation
+            inflation: inflation,
+            m2: bank.moneySupply
         });
         if (bank.history.length > 30) bank.history.shift();
     }

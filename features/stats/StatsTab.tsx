@@ -1,7 +1,6 @@
 
-
 import React, { useMemo } from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, AreaChart, Area, XAxis, YAxis } from 'recharts';
 import { ResourceType, ProductType, EconomicSnapshot } from '../../shared/types';
 import { Card } from '../../shared/components';
 import { RESOURCE_ICONS } from '../../shared/assets';
@@ -9,7 +8,7 @@ import { useGameStore } from '../../shared/store/useGameStore';
 import { SupplyChainViz } from './SupplyChainViz';
 import { CompetitionMatrix } from './CompetitionMatrix';
 import { 
-  ArrowUp, ArrowDown, Coins, Factory, Scale, AlertCircle, ShoppingCart, Package, Users, PieChart as PieChartIcon, Landmark, Smile, Baby, UserMinus
+  ArrowUp, ArrowDown, Coins, Factory, Scale, AlertCircle, ShoppingCart, Package, Users, PieChart as PieChartIcon, Landmark, Smile, Activity
 } from 'lucide-react';
 
 const NAME_MAP: Record<string, string> = {
@@ -24,11 +23,12 @@ export const StatsTab: React.FC = () => {
   const cityTreasury = useGameStore(s => s.gameState.cityTreasury);
   const resources = useGameStore(s => s.gameState.resources);
   const products = useGameStore(s => s.gameState.products);
+  const macroHistory = useGameStore(s => s.gameState.macroHistory);
   
   const totalResidentCash = population.residents.reduce((sum, r) => sum + r.cash, 0);
   const totalCorporateCash = companies.reduce((sum, c) => sum + c.cash, 0);
   const totalCityCash = cityTreasury.cash;
-  const totalSystemGold = totalResidentCash + totalCorporateCash + totalCityCash;
+  const totalSystemGold = economicOverview.totalSystemGold; // M0 + Loans approximation
 
   const moneySupplyData = [
       { name: '居民持有', value: totalResidentCash, color: '#3b82f6' }, 
@@ -36,21 +36,18 @@ export const StatsTab: React.FC = () => {
       { name: '国库持有', value: totalCityCash, color: '#f59e0b' }
   ].filter(d => d.value > 0);
 
-  const classData = useMemo(() => {
-      const sorted = [...population.residents].sort((a, b) => a.cash - b.cash);
-      const poor = sorted.filter(r => r.cash < 50).length;
-      const middle = sorted.filter(r => r.cash >= 50 && r.cash < 300).length;
-      const rich = sorted.filter(r => r.cash >= 300).length;
-
-      return [
-          { name: '底层 (<50oz)', value: poor, color: '#94a3b8' },   
-          { name: '中产 (50-300oz)', value: middle, color: '#60a5fa' }, 
-          { name: '富裕 (>300oz)', value: rich, color: '#f43f5e' }    
-      ].filter(d => d.value > 0);
-  }, [population.residents]);
-
   const cpi = (resources[ResourceType.GRAIN].currentPrice + products[ProductType.BREAD].marketPrice).toFixed(2);
   const sentiment = population.consumerSentiment || 50;
+
+  // Prepare GDP Data
+  const gdpData = useMemo(() => {
+      return macroHistory.slice(-30).map(h => ({
+          day: h.day,
+          c: h.components?.c || 0,
+          i: h.components?.i || 0,
+          g: h.components?.g || 0
+      }));
+  }, [macroHistory]);
 
   return (
     <div className="space-y-6 animate-in fade-in">
@@ -60,7 +57,7 @@ export const StatsTab: React.FC = () => {
           <Card className="bg-stone-900 border-stone-800 border-l-4 border-l-amber-500">
              <div className="flex items-center gap-3 mb-2">
                  <div className="p-2 bg-amber-950/50 rounded-lg text-amber-500"><Coins size={18}/></div>
-                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">货币供应 (M0)</div>
+                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">M2 货币供应</div>
              </div>
              <div className="text-2xl font-mono text-amber-400 font-bold ml-1">{Math.floor(totalSystemGold).toLocaleString()} <span className="text-sm text-stone-600">oz</span></div>
           </Card>
@@ -90,15 +87,24 @@ export const StatsTab: React.FC = () => {
           </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Card title="产业链全景图 (Supply Chain)" className="bg-stone-900 border-stone-800">
-              <SupplyChainViz />
-          </Card>
-          <CompetitionMatrix />
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="货币供应分布 (Money Supply)" className="bg-stone-900 border-stone-800 h-80">
+          <Card title="GDP 构成 (C+I+G)" className="bg-stone-900 border-stone-800 h-80">
+             <div className="w-full h-full pb-4">
+                <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={gdpData}>
+                        <XAxis dataKey="day" stroke="#666" tick={{fontSize: 10}} />
+                        <YAxis stroke="#666" tick={{fontSize: 10}} />
+                        <Tooltip contentStyle={{backgroundColor:'#1c1917', border: '1px solid #444'}} />
+                        <Legend verticalAlign="top" iconType="circle"/>
+                        <Area type="monotone" dataKey="c" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="消费 (C)" />
+                        <Area type="monotone" dataKey="i" stackId="1" stroke="#10b981" fill="#10b981" name="投资 (I)" />
+                        <Area type="monotone" dataKey="g" stackId="1" stroke="#f59e0b" fill="#f59e0b" name="政府 (G)" />
+                    </AreaChart>
+                </ResponsiveContainer>
+             </div>
+          </Card>
+
+          <Card title="货币供应分布 (M2 Components)" className="bg-stone-900 border-stone-800 h-80">
              <div className="w-full h-full relative">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -111,20 +117,13 @@ export const StatsTab: React.FC = () => {
                 </ResponsiveContainer>
             </div>
           </Card>
+      </div>
 
-          <Card title="社会阶层结构 (Class Structure)" className="bg-stone-900 border-stone-800 h-80">
-             <div className="w-full h-full relative">
-                <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                    <Pie data={classData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={2} dataKey="value" stroke="none">
-                        {classData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{backgroundColor:'#1c1917', border: '1px solid #444', borderRadius: '8px'}} />
-                    <Legend verticalAlign="bottom" iconType="circle"/>
-                    </PieChart>
-                </ResponsiveContainer>
-             </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card title="产业链全景图 (Supply Chain)" className="bg-stone-900 border-stone-800">
+              <SupplyChainViz />
           </Card>
+          <CompetitionMatrix />
       </div>
 
       <Card 

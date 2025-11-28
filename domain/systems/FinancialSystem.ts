@@ -109,8 +109,12 @@ export class FinancialSystem {
     state.macroHistory.push({
         day: state.day,
         gdp: parseFloat(gdp.toFixed(2)),
-        consumption: parseFloat(totalConsumptionValue.toFixed(2)),
-        investment: 0, 
+        components: {
+            c: parseFloat(totalConsumptionValue.toFixed(2)),
+            i: 0,
+            g: parseFloat(govSpending.toFixed(2)),
+            netX: 0
+        },
         cpi: parseFloat(cpi.toFixed(2)),
         inflation: parseFloat(inflation.toFixed(4)),
         unemployment: parseFloat(unemploymentRate.toFixed(4)),

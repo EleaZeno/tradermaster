@@ -1,11 +1,10 @@
 
-
-import { GameState, Company, Resident, GameContext, SkillLevel } from '../../shared/types';
+import { GameState, Company, Resident, GameContext, SkillLevel, GDPFlowAccumulator } from '../../shared/types';
 import { TransactionService } from '../finance/TransactionService';
 import { GAME_CONFIG } from '../../shared/config';
 
 export class LaborService {
-  static process(gameState: GameState, context: GameContext, livingCostBenchmark: number, wagePressureMod: number): void {
+  static process(gameState: GameState, context: GameContext, livingCostBenchmark: number, wagePressureMod: number, gdpFlow: GDPFlowAccumulator): void {
     const { companies } = gameState;
     const residents = gameState.population.residents;
 
@@ -61,20 +60,16 @@ export class LaborService {
       const sensitivity = GAME_CONFIG.ECONOMY.WAGE_SENSITIVITY;
       
       gameState.population.residents.forEach(res => {
-          // 1. Inflation adjustment
           const change = res.reservationWage * lastInflation * sensitivity;
           if (change > 0) res.reservationWage += change; 
           else res.reservationWage += change * 0.1; 
           
-          // 2. Skill Premium adjustment
           let skillMultiplier = 1.0;
           if (res.skill === 'SKILLED') skillMultiplier = 1.5;
           if (res.skill === 'EXPERT') skillMultiplier = 2.5;
           
-          // Ensure reservation wage reflects skill
           res.reservationWage = Math.max(res.reservationWage, 1.5 * skillMultiplier);
           
-          // 3. Minimum Wage Policy Override
           if (gameState.policyOverrides.minWage > 0) {
               res.reservationWage = Math.max(res.reservationWage, gameState.policyOverrides.minWage * skillMultiplier);
           }
@@ -121,7 +116,6 @@ export class LaborService {
     gameState.population.residents.forEach(resident => {
         if (resident.isPlayer || resident.job === 'MAYOR' || resident.job === 'DEPUTY_MAYOR' || resident.job === 'EXECUTIVE' || resident.job === 'UNION_LEADER') return;
 
-        // Upward Mobility
         if (resident.cash > WEALTH_THRESHOLD && (resident.job === 'FARMER' || resident.job === 'WORKER')) {
             if (resident.job === 'WORKER' && resident.employerId) {
                  const company = gameState.companies.find(c => c.id === resident.employerId);
@@ -134,7 +128,6 @@ export class LaborService {
             gameState.logs.unshift(`👔 ${resident.name} 积累了巨额财富，决定退休成为全职投资人。`);
         }
 
-        // Downward Mobility
         if (resident.cash < POVERTY_LINE && resident.job === 'FINANCIER') {
             resident.job = 'FARMER';
             resident.livingStandard = 'SURVIVAL'; 
@@ -161,7 +154,6 @@ export class LaborService {
         company.wageMultiplier = parseFloat((offer / benchmark).toFixed(1));
     }
     
-    // Policy Override: Minimum Wage Floor
     if (gameState.policyOverrides.minWage > 0) {
         offer = Math.max(offer, gameState.policyOverrides.minWage);
     }
@@ -217,9 +209,7 @@ export class LaborService {
     const target = Math.max(0, company.targetEmployees - nonWorkersCount);
     const gap = target - workers.length;
 
-    // Hiring
     if (gap > 0 && company.cash > company.wageOffer * 3) { 
-      // LABOR SUPPLY LOGIC: Check Reservation Wage
       const candidate = allResidents.find(r => 
           r.job === 'FARMER' && 
           r.reservationWage <= company.wageOffer && 
@@ -233,11 +223,9 @@ export class LaborService {
         
         if (context.employeesByCompany[company.id]) context.employeesByCompany[company.id].push(candidate);
         
-        // Signing Bonus
         TransactionService.transfer(company, candidate, company.wageOffer * 0.5, { treasury: gameState.cityTreasury, residents: allResidents, context });
       }
     } 
-    // Firing
     else if (gap < 0) {
       const workerToFire = workers[0];
       if (workerToFire) {
