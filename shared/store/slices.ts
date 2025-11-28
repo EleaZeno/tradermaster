@@ -1,7 +1,7 @@
 
 
 import { StateCreator } from 'zustand';
-import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure } from '../types';
+import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure, PolicyOverrides } from '../types';
 import { INITIAL_STATE } from '../initialState';
 import { processGameTick } from '../../application/GameLoop';
 import { MarketService } from '../../domain/market/MarketService';
@@ -48,6 +48,7 @@ export interface GameSlice {
   stop: () => void;
   setGameSpeed: (speed: number) => void;
   tick: () => void;
+  setPolicyOverride: (overrides: Partial<PolicyOverrides>) => void;
 }
 
 export type GameStore = GameSlice & UISlice & MarketSlice & PlayerSlice & CompanySlice & BankSlice;
@@ -314,6 +315,10 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
   start: () => set((state) => { state.isRunning = true }),
   stop: () => set((state) => { state.isRunning = false }),
   setGameSpeed: (speed) => set((state) => { state.gameSpeed = speed }),
+  
+  setPolicyOverride: (overrides) => set((state) => {
+      Object.assign(state.gameState.policyOverrides, overrides);
+  }),
 
   tick: () => set((state) => {
     processGameTick(state.gameState);

@@ -63,9 +63,9 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
 
           <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
              {/* Chart */}
-             <div className="flex-1 p-2 sm:p-4 bg-stone-950/50 border-b lg:border-b-0 lg:border-r border-stone-800 flex flex-col min-h-[250px] lg:min-h-0">
-                 <div className="flex-1 w-full">
-                     <KLineChart data={item.history} height={undefined} />
+             <div className="flex-1 p-2 sm:p-4 bg-stone-950/50 border-b lg:border-b-0 lg:border-r border-stone-800 flex flex-col min-h-[300px] lg:min-h-0 relative overflow-hidden">
+                 <div className="absolute inset-4 overflow-hidden">
+                     <KLineChart data={item.history} height="100%" />
                  </div>
              </div>
 

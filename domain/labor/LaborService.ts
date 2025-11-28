@@ -25,7 +25,7 @@ export class LaborService {
       const companyEmployees = employeesByCompany[company.id] || [];
 
       LaborService.processUnionPolitics(company, companyEmployees, gameState);
-      LaborService.updateWageOffer(company, livingCostBenchmark);
+      LaborService.updateWageOffer(company, livingCostBenchmark, gameState);
 
       if (!company.isPlayerFounded) {
         LaborService.adjustAIStrategy(company, companyEmployees, wagePressureMod);
@@ -73,6 +73,11 @@ export class LaborService {
           
           // Ensure reservation wage reflects skill
           res.reservationWage = Math.max(res.reservationWage, 1.5 * skillMultiplier);
+          
+          // 3. Minimum Wage Policy Override
+          if (gameState.policyOverrides.minWage > 0) {
+              res.reservationWage = Math.max(res.reservationWage, gameState.policyOverrides.minWage * skillMultiplier);
+          }
       });
   }
 
@@ -141,7 +146,7 @@ export class LaborService {
     gameState.population.farmers = gameState.population.residents.filter(r => r.job === 'FARMER').length;
   }
 
-  private static updateWageOffer(company: Company, benchmark: number): void {
+  private static updateWageOffer(company: Company, benchmark: number, gameState: GameState): void {
     let targetMultiplier = company.wageMultiplier || 1.5;
     
     if (company.unionTension > 50) {
@@ -154,6 +159,11 @@ export class LaborService {
     if (offer < survivalWage) {
         offer = parseFloat(survivalWage.toFixed(2));
         company.wageMultiplier = parseFloat((offer / benchmark).toFixed(1));
+    }
+    
+    // Policy Override: Minimum Wage Floor
+    if (gameState.policyOverrides.minWage > 0) {
+        offer = Math.max(offer, gameState.policyOverrides.minWage);
     }
 
     company.wageOffer = offer;

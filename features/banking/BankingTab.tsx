@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../../shared/store/useGameStore';
 import { Card, Button } from '../../shared/components';
@@ -14,8 +13,13 @@ export const BankingTab: React.FC = () => {
   const [targetUnemployment, setTargetUnemployment] = useState(bank.targetUnemployment);
 
   useEffect(() => {
-     setTargetInflation(bank.targetInflation);
-     setTargetUnemployment(bank.targetUnemployment);
+     // Check if values actually differ before setting state to avoid render loops
+     if (targetInflation !== bank.targetInflation) {
+         setTargetInflation(bank.targetInflation);
+     }
+     if (targetUnemployment !== bank.targetUnemployment) {
+         setTargetUnemployment(bank.targetUnemployment);
+     }
   }, [bank.targetInflation, bank.targetUnemployment]);
 
   const handleApply = () => {

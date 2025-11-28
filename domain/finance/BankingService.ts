@@ -33,6 +33,21 @@ export class BankingService {
     }
 
     private static applyMonetaryPolicy(state: GameState, bank: Bank) {
+        // --- OVERRIDE LOGIC ---
+        if (state.policyOverrides.interestRate !== null) {
+            bank.loanRate = state.policyOverrides.interestRate;
+            bank.depositRate = Math.max(0, bank.loanRate - 0.002);
+            
+            // Simplified Yield Curve for Manual Mode
+            bank.yieldCurve = {
+                rate1d: bank.loanRate,
+                rate30d: bank.loanRate * 1.1,
+                rate365d: bank.loanRate * 1.3
+            };
+            return;
+        }
+        // ----------------------
+
         // Calculate Inflation
         const history = state.macroHistory;
         let currentInflation = 0;

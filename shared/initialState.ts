@@ -371,5 +371,13 @@ export const INITIAL_STATE: GameState = {
             achievements: false,
             news: false
         }
+    },
+    
+    policyOverrides: {
+        interestRate: null,
+        moneyPrinter: 0,
+        migrationRate: 1.0,
+        taxMultiplier: 1.0,
+        minWage: 0
     }
 };

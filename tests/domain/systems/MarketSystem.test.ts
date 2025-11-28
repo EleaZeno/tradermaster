@@ -53,6 +53,13 @@ const createMockState = (): GameState => ({
             achievements: true,
             news: true
         }
+    },
+    policyOverrides: {
+        interestRate: null,
+        moneyPrinter: 0,
+        migrationRate: 1.0,
+        taxMultiplier: 1.0,
+        minWage: 0
     }
 });
 

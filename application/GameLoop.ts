@@ -7,6 +7,7 @@ import { ConsumerService } from '../domain/consumer/ConsumerService';
 import { StockMarketService } from '../domain/finance/StockMarketService';
 import { BankingService } from '../domain/finance/BankingService';
 import { MarketService } from '../domain/market/MarketService';
+import { TransactionService } from '../domain/finance/TransactionService';
 import { GAME_CONFIG } from '../shared/config';
 
 export const processGameTick = (gameState: GameState): void => {
@@ -41,8 +42,32 @@ export const processGameTick = (gameState: GameState): void => {
         MarketService.pruneStaleOrders(gameState, context || createFallbackContext(gameState));
     }
 
+    // --- Core Economic Cycle (Closed Loop) ---
+    // 1. Price decides consumption (ConsumerService)
+    // 2. Demand -> Production adjustment (ProductionService)
+    // 3. Production -> Labor Demand (LaborService/ProductionService)
+    // 4. Labor Market -> Wage (LaborService)
+    // 5. Wage -> Income -> Consumption Budget (ConsumerService)
+    // 6. Income -> Profit -> Investment (ProductionService/StockMarketService)
+    // 7. Investment -> Capital -> Next Output (ProductionService)
+    // 8. Price Adjustment (MarketService/ProductionService)
+    // 9. CPI -> Inflation (StockMarketService)
+    // 10. Money Supply (BankingService)
+    
     if (currentTick % rates.CORE_ECO === 0 && context) {
         resetDailyCounters(gameState); 
+        
+        // --- Policy Shock: Helicopter Money (Quantitative Easing) ---
+        if (gameState.policyOverrides.moneyPrinter > 0) {
+            const amount = gameState.policyOverrides.moneyPrinter / gameState.population.residents.length;
+            gameState.population.residents.forEach(r => {
+                r.cash += amount;
+            });
+            // Also print to treasury to prevent deficit
+            gameState.cityTreasury.cash += gameState.policyOverrides.moneyPrinter;
+            gameState.economicOverview.totalSystemGold += (gameState.policyOverrides.moneyPrinter * 2);
+        }
+        // -----------------------------------------------------------
 
         const flowStats: FlowStats = {
             [ResourceType.GRAIN]: { produced: 0, consumed: 0, spoiled: 0 },
@@ -63,8 +88,14 @@ export const processGameTick = (gameState: GameState): void => {
         const grainPriceBenchmark = Math.max(0.1, gameState.resources[ResourceType.GRAIN].currentPrice);
         const wagePressureModifier = getEventModifier('WAGE');
 
+        // Order matters for "Circular Flow"
+        // 1. Labor Market acts first (Wage Setting) based on expectations (Inflation)
         LaborService.process(gameState, context, grainPriceBenchmark, wagePressureModifier);
+        
+        // 2. Production (Hiring + Output + Sales)
         ProductionService.process(gameState, context, flowStats, getEventModifier);
+        
+        // 3. Consumption (Buying goods using income from Labor/Production steps)
         ConsumerService.process(gameState, context, flowStats);
         
         // --- Demographics & Sentiment ---
@@ -83,7 +114,22 @@ export const processGameTick = (gameState: GameState): void => {
     if (currentTick % rates.MACRO === 0 && context) {
         BankingService.process(gameState, context);
         StockMarketService.processStockMarket(gameState);
-        StockMarketService.manageFiscalPolicy(gameState, context);
+        
+        // Fiscal Policy: Only run automatic if Tax Multiplier is default (1.0)
+        // If manually modified, we assume manual control and just apply the multiplier to base rates
+        if (gameState.policyOverrides.taxMultiplier === 1.0) {
+            StockMarketService.manageFiscalPolicy(gameState, context);
+        } else {
+            // Apply Manual Tax Multiplier Logic
+            const pol = gameState.cityTreasury.taxPolicy;
+            const mult = gameState.policyOverrides.taxMultiplier;
+            pol.incomeTaxRate = Math.min(0.8, GAME_CONFIG.TAX_RATES.INCOME_LOW * mult);
+            pol.corporateTaxRate = Math.min(0.8, GAME_CONFIG.TAX_RATES.CORPORATE * mult);
+            pol.consumptionTaxRate = Math.min(0.5, GAME_CONFIG.TAX_RATES.CONSUMPTION * mult);
+            
+            gameState.cityTreasury.fiscalStatus = 'NEUTRAL'; 
+            gameState.cityTreasury.fiscalCorrection = `人工干预 (${mult.toFixed(1)}x)`;
+        }
     }
 
     performance.mark('tick-end');
@@ -132,8 +178,12 @@ const updateDemographics = (state: GameState) => {
 
     const pop = state.population;
     
+    // Policy Override: Migration Multiplier
+    const multiplier = state.policyOverrides.migrationRate;
+    
     // Births (Migration)
-    if (pop.averageHappiness > 80 && pop.total < 100) {
+    // Base probability boosted by multiplier
+    if (pop.averageHappiness > (80 / Math.max(0.1, multiplier)) && pop.total < 150) {
         // New Immigrant
         const id = `res_imm_${state.day}_${Math.random().toString(36).substr(2,4)}`;
         state.logs.unshift(`👶 新移民加入: 社区迎来了一位新成员`);
@@ -150,8 +200,9 @@ const updateDemographics = (state: GameState) => {
         pop.demographics.immigration++;
     }
 
-    // Deaths (Departures)
-    if (pop.averageHappiness < 30 && pop.total > 10) {
+    // Deaths (Departures) - Reduced by high multiplier (happy place)
+    const deathThreshold = 30 * Math.min(1, 1/multiplier);
+    if (pop.averageHappiness < deathThreshold && pop.total > 10) {
         const unhappy = pop.residents.filter(r => !r.isPlayer && r.happiness < 20);
         if (unhappy.length > 0) {
             const leaver = unhappy[0];

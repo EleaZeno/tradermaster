@@ -1,12 +1,12 @@
 
+
 import React, { useRef, useEffect, useState } from 'react';
-import { Bot, Send, X } from 'lucide-react';
+import { Bot, Send, X, Loader2 } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { ChatMessage } from '../shared/types';
 import { getFinancialAdvisorResponse } from '../infrastructure/ai/GeminiAdapter';
 import { useGameStore } from '../shared/store/useGameStore';
 import { useGodModeData } from '../shared/hooks/useGodModeData';
-import { useShallow } from 'zustand/react/shallow';
 import DOMPurify from 'dompurify';
 
 // @ts-ignore
@@ -40,6 +40,7 @@ export const ChatWidget: React.FC = () => {
   }, [chatHistory, isOpen, aiMutation.isPending]);
 
   const handleSend = async () => {
+    // FIX: Corrected logic. Previously `if (input || pending)` caused it to return even if valid.
     if (!input.trim() || aiMutation.isPending) return;
     
     const sanitizedInput = input.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -61,7 +62,7 @@ export const ChatWidget: React.FC = () => {
   };
 
   return (
-    <div className={`fixed bottom-4 right-4 z-50 flex flex-col items-end transition-all duration-300 ${isOpen ? 'w-96' : 'w-auto'}`}>
+    <div className={`fixed bottom-20 lg:bottom-4 right-4 z-50 flex flex-col items-end transition-all duration-300 ${isOpen ? 'w-full max-w-[380px]' : 'w-auto'}`}>
       {isOpen && (
         <div className="w-full bg-stone-900 border border-stone-700 rounded-xl shadow-2xl overflow-hidden flex flex-col mb-4 h-[500px]">
           <div className="bg-stone-800 p-3 flex justify-between items-center border-b border-stone-700">
@@ -77,7 +78,11 @@ export const ChatWidget: React.FC = () => {
                  />
                </div>
              ))}
-             {aiMutation.isPending && <div className="text-stone-500 text-xs italic animate-pulse">Alpha 正在思考...</div>}
+             {aiMutation.isPending && (
+                 <div className="flex items-center gap-2 text-stone-500 text-xs italic">
+                     <Loader2 size={12} className="animate-spin"/> Alpha 正在思考...
+                 </div>
+             )}
              <div ref={chatEndRef}></div>
           </div>
           <div className="p-3 bg-stone-800 border-t border-stone-700 flex gap-2">
@@ -86,10 +91,11 @@ export const ChatWidget: React.FC = () => {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="输入问题..." 
+                placeholder="询问经济状况..." 
                 className="flex-1 bg-stone-900 border border-stone-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                disabled={aiMutation.isPending}
              />
-             <button onClick={handleSend} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-500 disabled:opacity-50" disabled={aiMutation.isPending}>
+             <button onClick={handleSend} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-500 disabled:opacity-50" disabled={aiMutation.isPending || !input.trim()}>
                 <Send size={16} />
              </button>
           </div>
@@ -97,9 +103,14 @@ export const ChatWidget: React.FC = () => {
       )}
       <button 
          onClick={() => setIsOpen(!isOpen)}
-         className="bg-blue-600 text-white p-4 rounded-full shadow-xl hover:bg-blue-500 transition-transform active:scale-95 flex items-center justify-center"
+         className="bg-blue-600 text-white p-4 rounded-full shadow-xl hover:bg-blue-500 transition-transform active:scale-95 flex items-center justify-center relative group"
       >
          {isOpen ? <X size={24} /> : <Bot size={24} />}
+         {!isOpen && (
+             <span className="absolute right-full mr-2 bg-stone-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                 咨询 AI
+             </span>
+         )}
       </button>
     </div>
   );

@@ -438,6 +438,14 @@ export interface GameSettings {
   };
 }
 
+export interface PolicyOverrides {
+  interestRate: number | null; // Fixed rate if not null (0-1)
+  moneyPrinter: number; // Amount to inject daily
+  migrationRate: number; // Multiplier (1.0 default)
+  taxMultiplier: number; // Multiplier (1.0 default)
+  minWage: number; // Wage floor
+}
+
 export interface GameState {
   cash: number; 
   day: number;
@@ -464,6 +472,9 @@ export interface GameState {
   achievements: AchievementState[];
   notifications: Notification[];
   settings: GameSettings;
+  
+  // Lab
+  policyOverrides: PolicyOverrides;
 }
 
 export interface AgentAdvice {
