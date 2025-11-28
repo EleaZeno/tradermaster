@@ -61,6 +61,12 @@ const createMockState = (): GameState => ({
         migrationRate: 1.0,
         taxMultiplier: 1.0,
         minWage: 0
+    },
+    structuralAnalysis: {
+        lastCheckDay: 0,
+        results: [],
+        inflationSource: { costPush: 0, demandPull: 0, monetary: 0 },
+        logs: []
     }
 });
 

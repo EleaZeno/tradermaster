@@ -1,6 +1,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { GameState, GodModeData, ResourceType, ProductType, Company, NewsEvent } from "../../shared/types";
+import { EconomicHealthSnapshot } from "../../domain/analytics/HealthCheckService";
 
 const NEWS_EVENTS = [
     { headline: "遭遇旱灾", description: "由于持续的高温干旱，全谷的粮食产量预计将下降 30%。", impactType: "BAD", target: ResourceType.GRAIN, modifier: -0.3 },
@@ -120,6 +121,57 @@ export const analyzeCompany = async (company: Company, gameState: GameState): Pr
         return response.text || "数据不足，无法分析。";
     } catch (error) {
         return "分析服务暂时不可用。";
+    }
+}
+
+export const auditEconomy = async (snapshot: EconomicHealthSnapshot): Promise<string> => {
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        const prompt = `
+        You are an Economic Simulation Auditor/Doctor.
+        Your task is to diagnose the health, logic, and stability of a simulated economy.
+        
+        INPUT DATA (JSON):
+        ${JSON.stringify(snapshot, null, 2)}
+
+        INSTRUCTIONS:
+        Analyze the data for:
+        1. **Logical Contradictions**: e.g., Supply < Demand but Price Falling? Unemployment High but Wages Rising?
+        2. **Structural Imbalances**: e.g., Money Supply exploding vs Flat GDP (Hyperinflation risk)? Zero Profit Margins?
+        3. **Pathological Dynamics**: e.g., Deflationary spiral, Liquidity trap (Velocity low), Inventory glut.
+        4. **Parameter Errors**: Are values behaving within realistic bounds for a simulation?
+
+        OUTPUT FORMAT (Markdown):
+        ## 🏥 经济诊断报告 (Day ${snapshot.timestamp})
+        
+        ### 1. 核心体征
+        *Summarize GDP growth, Inflation, Unemployment in one sentence.*
+
+        ### 2. 异常检测 (Critical Alerts)
+        *List bullet points of any detected anomalies. If none, say "System Nominal".*
+        - 🚨 [Severity: High/Med/Low] Issue Description -> Probable Cause.
+
+        ### 3. 结构性分析
+        *Brief analysis of:*
+        - **Market Efficiency**: Are prices clearing markets? (Check Spread & Inventory)
+        - **Labor Market**: Is the Wage-Productivity link healthy? (Wage Share: ${snapshot.labor.wage_share_gdp})
+        - **Financial Stability**: Debt levels and Money Velocity.
+
+        ### 4. 修复/调优建议
+        *Suggest 1-2 concrete actions for the player (Policy) or developer (Parameter tweaks).*
+
+        Style: Professional, Analytical, Constructive. Use Chinese.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+
+        return response.text || "诊断服务无响应。";
+    } catch (error) {
+        return "诊断连接失败。";
     }
 }
 

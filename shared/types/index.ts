@@ -1,4 +1,5 @@
 
+
 import { ReactNode } from 'react';
 
 export enum ResourceType {
@@ -458,6 +459,35 @@ export interface PolicyOverrides {
   minWage: number; // Wage floor
 }
 
+// --- NEW: Structural & Stabilizer Types ---
+
+export interface StructuralCheckResult {
+    category: 'PRICE' | 'CONSUMPTION' | 'PRODUCTION' | 'INFLATION';
+    status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+    message: string;
+    score: number;
+    meta?: any;
+}
+
+export interface StabilizationAction {
+    day: number;
+    type: 'FISCAL' | 'MONETARY' | 'PARAM_TUNE';
+    description: string;
+    applied: boolean;
+}
+
+export interface StructuralAnalysis {
+    lastCheckDay: number;
+    results: StructuralCheckResult[];
+    inflationSource: {
+        costPush: number;
+        demandPull: number;
+        monetary: number;
+    };
+    logs: StabilizationAction[];
+    meta?: any;
+}
+
 export interface GameState {
   cash: number; 
   day: number;
@@ -487,6 +517,9 @@ export interface GameState {
   
   // Lab
   policyOverrides: PolicyOverrides;
+  
+  // Stabilizer
+  structuralAnalysis: StructuralAnalysis;
 }
 
 export interface AgentAdvice {

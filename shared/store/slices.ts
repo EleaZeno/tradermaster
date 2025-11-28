@@ -3,7 +3,7 @@
 import { StateCreator } from 'zustand';
 import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure, PolicyOverrides } from '../types';
 import { INITIAL_STATE } from '../initialState';
-import { processGameTick } from '../../application/GameLoop';
+import { processGameTick } from '../../domain/gameLogic';
 import { MarketService } from '../../domain/market/MarketService';
 import { checkAchievements, ACHIEVEMENTS } from '../../services/achievementService';
 
