@@ -159,11 +159,9 @@ export const analyzeCompany = async (company: Company, gameState: GameState): Pr
 export const auditEconomy = async (snapshot: EconomicHealthSnapshot): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        // Since we can't easily access state here without passing it, we assume Chinese default or English if prompted differently,
-        // but for now let's default to Chinese as per request unless we modify signature.
-        // To be safe, we'll ask for English output if the Snapshot structure hints or we just stick to Chinese as default for audit.
-        // Or better, let's just make it output based on the user's implicit locale.
-        // Actually, we can check a simple logic or default to Chinese as per the prompt request for "Full Hanization".
+        // Default to Chinese as this function doesn't easily access state without passing it,
+        // but typically this app is set to Chinese default. 
+        // For robustness, assume Chinese unless otherwise instructed.
         
         const systemInstruction = `
         You are an Economic Simulation Auditor/Doctor.

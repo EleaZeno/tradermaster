@@ -116,7 +116,7 @@ export const BankingTab: React.FC = () => {
             </Card>
         </div>
 
-        <Card title="Macro Data (Rates & Inflation)" className="bg-stone-900 border-stone-800 h-80">
+        <Card title={t('bank.macro_data')} className="bg-stone-900 border-stone-800 h-80">
             <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={bank.history}>
                     <defs>
@@ -132,7 +132,7 @@ export const BankingTab: React.FC = () => {
                         contentStyle={{backgroundColor: '#1c1917', border: '1px solid #444', fontSize: '12px'}}
                         labelStyle={{color: '#9ca3af'}}
                     />
-                    <Area yAxisId="left" type="monotone" dataKey="reserves" stroke="#10b981" fillOpacity={1} fill="url(#colorReserves)" name="Reserves" />
+                    <Area yAxisId="left" type="monotone" dataKey="reserves" stroke="#10b981" fillOpacity={1} fill="url(#colorReserves)" name={t('bank.reserves')} />
                     <Line yAxisId="right" type="monotone" dataKey="rates" stroke="#f59e0b" dot={false} strokeWidth={2} name="Rate" />
                     <Line yAxisId="right" type="monotone" dataKey="inflation" stroke="#ef4444" dot={false} strokeWidth={2} name="Inflation" />
                 </ComposedChart>
@@ -145,10 +145,10 @@ export const BankingTab: React.FC = () => {
                     <table className="w-full text-xs text-left text-stone-400">
                         <thead className="text-stone-500 uppercase bg-stone-950 sticky top-0">
                             <tr>
-                                <th className="px-4 py-2">ID</th>
-                                <th className="px-4 py-2">Borrower</th>
-                                <th className="px-4 py-2 text-right">Principal</th>
-                                <th className="px-4 py-2 text-right">Due</th>
+                                <th className="px-4 py-2">{t('bank.loan_id')}</th>
+                                <th className="px-4 py-2">{t('bank.borrower')}</th>
+                                <th className="px-4 py-2 text-right">{t('bank.principal')}</th>
+                                <th className="px-4 py-2 text-right">{t('bank.due')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -161,7 +161,7 @@ export const BankingTab: React.FC = () => {
                                 </tr>
                             ))}
                             {bank.loans.length === 0 && (
-                                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-600">No active loans</td></tr>
+                                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-600">{t('bank.no_loans')}</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -173,9 +173,9 @@ export const BankingTab: React.FC = () => {
                     <table className="w-full text-xs text-left text-stone-400">
                         <thead className="text-stone-500 uppercase bg-stone-950 sticky top-0">
                             <tr>
-                                <th className="px-4 py-2">Account</th>
-                                <th className="px-4 py-2 text-right">Balance</th>
-                                <th className="px-4 py-2 text-right">APY</th>
+                                <th className="px-4 py-2">{t('bank.account')}</th>
+                                <th className="px-4 py-2 text-right">{t('bank.balance')}</th>
+                                <th className="px-4 py-2 text-right">{t('bank.apy')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -187,7 +187,7 @@ export const BankingTab: React.FC = () => {
                                 </tr>
                             ))}
                              {bank.deposits.length === 0 && (
-                                <tr><td colSpan={3} className="px-4 py-4 text-center text-stone-600">No active deposits</td></tr>
+                                <tr><td colSpan={3} className="px-4 py-4 text-center text-stone-600">{t('bank.no_deposits')}</td></tr>
                             )}
                         </tbody>
                     </table>
