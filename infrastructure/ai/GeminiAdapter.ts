@@ -46,12 +46,13 @@ const getEconomicSummary = (gameState: GameState, godModeData: GodModeData) => {
     };
 };
 
-export const getFinancialAdvisorResponse = async (
+export const getFinancialAdvisorResponseStream = async (
   userMessage: string, 
   gameState: GameState,
   godModeData: GodModeData,
-  chatHistory: {role: string, text: string}[]
-): Promise<string> => {
+  chatHistory: {role: string, text: string}[],
+  onChunk: (text: string) => void
+): Promise<void> => {
   try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const summary = getEconomicSummary(gameState, godModeData);
@@ -71,17 +72,36 @@ export const getFinancialAdvisorResponse = async (
       6. Respond in Chinese.
       `;
 
-      const response = await ai.models.generateContent({
+      const responseStream = await ai.models.generateContentStream({
         model: 'gemini-2.5-flash',
         contents: prompt,
       });
 
-      return response.text || "AI 暂时无法连接，请检查网络设置。";
+      for await (const chunk of responseStream) {
+          const text = chunk.text;
+          if (text) {
+              onChunk(text);
+          }
+      }
+
   } catch (error) {
       console.error("Gemini API Error:", error);
-      return "系统离线：无法连接到 Gemini 神经网络。请确保 API KEY 配置正确。";
+      onChunk("系统离线：无法连接到 Gemini 神经网络。请确保 API KEY 配置正确。");
   }
 };
+
+export const getFinancialAdvisorResponse = async (
+    userMessage: string, 
+    gameState: GameState,
+    godModeData: GodModeData,
+    chatHistory: {role: string, text: string}[]
+): Promise<string> => {
+    let fullText = "";
+    await getFinancialAdvisorResponseStream(userMessage, gameState, godModeData, chatHistory, (text) => {
+        fullText += text;
+    });
+    return fullText;
+}
 
 export const analyzeCompany = async (company: Company, gameState: GameState): Promise<string> => {
     try {

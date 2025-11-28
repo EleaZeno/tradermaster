@@ -1,5 +1,3 @@
-
-
 import React, { useState } from 'react';
 import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart, Bot, Sparkles, PieChart, Layers } from 'lucide-react';
 import { ProductType, ResourceType, IndustryType } from '../../shared/types';
@@ -239,9 +237,9 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                   {company.productionLines.map((line, idx) => (
                       <div key={idx} className="bg-stone-800 p-3 rounded flex justify-between items-center">
                           <div className="flex items-center gap-3">
-                              <div className="p-2 bg-stone-900 rounded">{RESOURCE_ICONS[line.type]}</div>
+                              <div className="p-2 bg-stone-900 rounded">{(RESOURCE_ICONS as any)[line.type] || null}</div>
                               <div>
-                                  <div className="font-bold text-stone-200">{line.type === 'GRAIN' ? '粮食种植' : '面包烘焙'}</div>
+                                  <div className="font-bold text-stone-200">{line.type === ResourceType.GRAIN ? '粮食种植' : '面包烘焙'}</div>
                                   <div className="text-xs text-stone-500">效率: {(line.efficiency*100).toFixed(0)}% | 产出分配: {(line.allocation*100).toFixed(0)}%</div>
                               </div>
                           </div>

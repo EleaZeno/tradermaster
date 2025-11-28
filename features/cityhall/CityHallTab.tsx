@@ -1,9 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
 import { useGameStore } from '../../shared/store/useGameStore';
-import { Card } from '../../shared/components';
-import { Crown, Search, Landmark, ArrowUp, ArrowDown, Briefcase, TrendingUp, Activity, PieChart } from 'lucide-react';
+import { Card, Button } from '../../shared/components';
+import { Crown, Search, Landmark, ArrowUp, ArrowDown, Briefcase, TrendingUp, Activity, PieChart, Coins, Scale, AlertTriangle } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+import { MonetarySystemType } from '../../shared/types';
 
 type SortKey = 'id' | 'wealth' | 'cash' | 'intelligence' | 'production';
 type SortOrder = 'asc' | 'desc';
@@ -18,6 +19,9 @@ export const CityHallTab: React.FC = () => {
   const cityTreasury = useGameStore(s => s.gameState.cityTreasury);
   const economicOverview = useGameStore(s => s.gameState.economicOverview);
   const companies = useGameStore(s => s.gameState.companies);
+  const bank = useGameStore(s => s.gameState.bank);
+  
+  const setMonetarySystem = useGameStore(s => s.setMonetarySystem);
   
   const mayor = population.residents.find(r => r.id === mayorId);
   const playerIsMayor = mayorId === 'res_player';
@@ -102,6 +106,11 @@ export const CityHallTab: React.FC = () => {
   const hoardingRatio = (cityTreasury.cash / (economicOverview.totalSystemGold || 1)) * 100;
   const netIncome = cityTreasury.dailyIncome - cityTreasury.dailyExpense;
 
+  const toggleSystem = () => {
+      const newSystem: MonetarySystemType = bank.system === 'GOLD_STANDARD' ? 'FIAT_MONEY' : 'GOLD_STANDARD';
+      setMonetarySystem(newSystem);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -149,47 +158,83 @@ export const CityHallTab: React.FC = () => {
              </div>
           </Card>
 
-          <Card title="国库与流动性监控" className="bg-stone-900 border-stone-800">
-              <div className="mb-4 flex justify-between items-end">
-                  <div>
-                    <div className="text-xs text-stone-500 mb-1">国库储备 (Reserves)</div>
-                    <div className="text-3xl font-mono text-emerald-400 font-bold">{Math.floor(cityTreasury.cash).toLocaleString()} oz</div>
-                  </div>
-                  <div className="text-right">
-                     <div className="text-xs text-stone-500 mb-1 flex items-center justify-end gap-1"><Activity size={10}/> 市场吸纳率</div>
-                     <div className={`text-lg font-mono font-bold ${hoardingRatio > 25 ? 'text-red-500' : 'text-stone-300'}`}>
-                         {hoardingRatio.toFixed(1)}%
-                     </div>
-                  </div>
-              </div>
-              
-              <div className="w-full h-2 bg-stone-800 rounded-full mb-4 overflow-hidden">
-                  <div 
-                    className={`h-full ${hoardingRatio > 25 ? 'bg-red-500' : 'bg-emerald-500'}`} 
-                    style={{width: `${Math.min(100, hoardingRatio)}%`}}
-                  ></div>
-              </div>
+          <div className="space-y-6">
+            {/* Monetary System Panel (NEW) */}
+            <Card title="货币制度 (Monetary System)" className="bg-gradient-to-br from-indigo-950 to-stone-900 border-indigo-800/50">
+                <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <div className="text-xs text-stone-400 mb-1 uppercase tracking-wider">Current Regime</div>
+                        <div className={`text-xl font-bold flex items-center gap-2 ${bank.system === 'GOLD_STANDARD' ? 'text-amber-400' : 'text-blue-400'}`}>
+                            {bank.system === 'GOLD_STANDARD' ? <Coins size={20}/> : <Scale size={20}/>}
+                            {bank.system === 'GOLD_STANDARD' ? '金本位 (Gold Standard)' : '信用货币 (Fiat Money)'}
+                        </div>
+                    </div>
+                    <Button onClick={toggleSystem} size="sm" variant="secondary" className="border border-indigo-500/30 hover:bg-indigo-900/50">
+                        切换为 {bank.system === 'GOLD_STANDARD' ? '信用货币' : '金本位'}
+                    </Button>
+                </div>
 
-              <div className="bg-stone-950 p-3 rounded border border-stone-800 space-y-3">
-                  <div className="flex items-center gap-2 text-sm font-bold text-stone-300 mb-2 border-b border-stone-800 pb-2">
-                      <Landmark size={14} className="text-amber-500"/> 实时调节税率
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                      <div>
-                          <div className="text-[10px] text-stone-500">个税</div>
-                          <div className="text-lg font-mono text-white">{(cityTreasury.taxPolicy.incomeTaxRate * 100).toFixed(1)}%</div>
-                      </div>
-                      <div>
-                          <div className="text-[10px] text-stone-500">企税</div>
-                          <div className="text-lg font-mono text-white">{(cityTreasury.taxPolicy.corporateTaxRate * 100).toFixed(1)}%</div>
-                      </div>
-                      <div>
-                          <div className="text-[10px] text-stone-500">消费税</div>
-                          <div className="text-lg font-mono text-white">{(cityTreasury.taxPolicy.consumptionTaxRate * 100).toFixed(1)}%</div>
-                      </div>
-                  </div>
-              </div>
-          </Card>
+                <div className="bg-stone-950/50 p-3 rounded-lg border border-stone-800 text-xs space-y-2">
+                    {bank.system === 'GOLD_STANDARD' ? (
+                        <>
+                            <div className="flex gap-2 text-amber-200"><span className="text-emerald-500">✔</span> 价格长期趋于稳定，抑制恶性通胀</div>
+                            <div className="flex gap-2 text-amber-200"><span className="text-emerald-500">✔</span> 债务扩张受到自然约束</div>
+                            <div className="flex gap-2 text-red-300"><span className="text-red-500">✘</span> 易发生通缩螺旋，经济增长受限</div>
+                            <div className="flex gap-2 text-red-300"><span className="text-red-500">✘</span> 央行无法进行逆周期调节 (无印钞权)</div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex gap-2 text-blue-200"><span className="text-emerald-500">✔</span> 刺激经济增长，信贷扩张灵活</div>
+                            <div className="flex gap-2 text-blue-200"><span className="text-emerald-500">✔</span> 央行可干预危机 (泰勒规则生效)</div>
+                            <div className="flex gap-2 text-red-300"><span className="text-red-500">✘</span> 长期存在通胀倾向</div>
+                            <div className="flex gap-2 text-red-300"><span className="text-red-500">✘</span> 债务可能过度膨胀导致泡沫</div>
+                        </>
+                    )}
+                </div>
+            </Card>
+
+            <Card title="国库与流动性监控" className="bg-stone-900 border-stone-800">
+                <div className="mb-4 flex justify-between items-end">
+                    <div>
+                        <div className="text-xs text-stone-500 mb-1">国库储备 (Reserves)</div>
+                        <div className="text-3xl font-mono text-emerald-400 font-bold">{Math.floor(cityTreasury.cash).toLocaleString()} oz</div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-xs text-stone-500 mb-1 flex items-center justify-end gap-1"><Activity size={10}/> 市场吸纳率</div>
+                        <div className={`text-lg font-mono font-bold ${hoardingRatio > 25 ? 'text-red-500' : 'text-stone-300'}`}>
+                            {hoardingRatio.toFixed(1)}%
+                        </div>
+                    </div>
+                </div>
+                
+                <div className="w-full h-2 bg-stone-800 rounded-full mb-4 overflow-hidden">
+                    <div 
+                        className={`h-full ${hoardingRatio > 25 ? 'bg-red-500' : 'bg-emerald-500'}`} 
+                        style={{width: `${Math.min(100, hoardingRatio)}%`}}
+                    ></div>
+                </div>
+
+                <div className="bg-stone-950 p-3 rounded border border-stone-800 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-bold text-stone-300 mb-2 border-b border-stone-800 pb-2">
+                        <Landmark size={14} className="text-amber-500"/> 实时调节税率
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                        <div>
+                            <div className="text-[10px] text-stone-500">个税</div>
+                            <div className="text-lg font-mono text-white">{(cityTreasury.taxPolicy.incomeTaxRate * 100).toFixed(1)}%</div>
+                        </div>
+                        <div>
+                            <div className="text-[10px] text-stone-500">企税</div>
+                            <div className="text-lg font-mono text-white">{(cityTreasury.taxPolicy.corporateTaxRate * 100).toFixed(1)}%</div>
+                        </div>
+                        <div>
+                            <div className="text-[10px] text-stone-500">消费税</div>
+                            <div className="text-lg font-mono text-white">{(cityTreasury.taxPolicy.consumptionTaxRate * 100).toFixed(1)}%</div>
+                        </div>
+                    </div>
+                </div>
+            </Card>
+          </div>
       </div>
 
       <Card className="bg-stone-900 border-stone-800" title={`居民数据库 (人口: ${population.total})`}>

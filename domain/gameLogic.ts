@@ -1,13 +1,11 @@
 
-
-import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident, MarketEvent, GDPFlowAccumulator } from '../shared/types';
-import { LaborService } from './labor/LaborService';
-import { ProductionService } from './company/ProductionService';
-import { ConsumerService } from './consumer/ConsumerService';
-import { StockMarketService } from './finance/StockMarketService';
+import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident, MarketEvent } from '../shared/types';
+import { LaborSystem } from './systems/LaborSystem';
+import { ProductionSystem } from './systems/ProductionSystem';
+import { ConsumerSystem } from './systems/ConsumerSystem';
+import { FinancialSystem } from './systems/FinancialSystem';
 import { BankingSystem } from './systems/BankingSystem';
-import { MarketService } from './market/MarketService';
-import { EconomicStabilizer } from './systems/EconomicStabilizer';
+import { MarketSystem } from './systems/MarketSystem';
 import { GAME_CONFIG } from '../shared/config';
 
 /**
@@ -50,11 +48,11 @@ export const processGameTick = (gameState: GameState): void => {
     // Essential for UI responsiveness and trading fluidity
     if (currentTick % rates.MARKET === 0) {
         // Only build simple context or pass partial context if needed, 
-        // but MarketService uses context for O(1) lookups. 
+        // but MarketSystem uses context for O(1) lookups. 
         // If context is undefined (heavy systems not running), we might need to lazy load it or fallback to array find.
-        // For stability, let's allow MarketService to fallback to array lookups if context is missing,
-        // OR simple optimizations inside MarketService.
-        MarketService.pruneStaleOrders(gameState, context || createFallbackContext(gameState));
+        // For stability, let's allow MarketSystem to fallback to array lookups if context is missing,
+        // OR simple optimizations inside MarketSystem.
+        MarketSystem.pruneStaleOrders(gameState, context || createFallbackContext(gameState));
     }
 
     // 1. Core Economy (Production, Labor, Consumption) - The "Game Day"
@@ -65,8 +63,6 @@ export const processGameTick = (gameState: GameState): void => {
             [ResourceType.GRAIN]: { produced: 0, consumed: 0, spoiled: 0 },
             [ProductType.BREAD]: { produced: 0, consumed: 0, spoiled: 0 }
         };
-        
-        const gdpFlow: GDPFlowAccumulator = { C: 0, I: 0, G: 0 };
         
         const getEventModifier = (target: string): number => {
             let modifier = 1.0;
@@ -83,9 +79,9 @@ export const processGameTick = (gameState: GameState): void => {
         const wagePressureModifier = getEventModifier('WAGE');
 
         // Execute Systems
-        LaborService.process(gameState, context, grainPriceBenchmark, wagePressureModifier, gdpFlow);
-        ProductionService.process(gameState, context, flowStats, getEventModifier, gdpFlow);
-        ConsumerService.process(gameState, context, flowStats, gdpFlow);
+        LaborSystem.process(gameState, context, grainPriceBenchmark, wagePressureModifier);
+        ProductionSystem.process(gameState, context, flowStats, getEventModifier);
+        ConsumerSystem.process(gameState, context, flowStats);
         
         // Advance Calendar Day
         gameState.day += 1;
@@ -93,18 +89,15 @@ export const processGameTick = (gameState: GameState): void => {
         
         // Run Financial Audit periodically within the Eco cycle or separately
         if (currentTick % rates.MACRO === 0) {
-             StockMarketService.runAudit(gameState, flowStats, gdpFlow);
+             FinancialSystem.runAudit(gameState, flowStats);
         }
     }
 
     // 2. Macro Systems (Banking, Stock Valuation)
     if (currentTick % rates.MACRO === 0 && context) {
         BankingSystem.process(gameState, context);
-        StockMarketService.processStockMarket(gameState);
-        StockMarketService.manageFiscalPolicy(gameState, context);
-        
-        // --- NEW: Economic Stabilizer ---
-        EconomicStabilizer.process(gameState, context);
+        FinancialSystem.processStockMarket(gameState);
+        FinancialSystem.manageFiscalPolicy(gameState, context);
     }
 
     performance.mark('tick-end');

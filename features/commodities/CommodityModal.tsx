@@ -1,9 +1,8 @@
 
-
 import React from 'react';
-import { ResourceItem, ProductItem, OrderBook } from '../../shared/types';
+import { ResourceItem, ProductItem } from '../../shared/types';
 import { useGameStore } from '../../shared/store/useGameStore';
-import { Card, Button } from '../../shared/components';
+import { Button } from '../../shared/components';
 import { KLineChart } from '../../shared/components/charts/KLineChart';
 import { X, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -23,6 +22,11 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
   const openPrice = item.history.length > 0 ? item.history[item.history.length - 1].open : 0;
   const change = ((currentPrice - openPrice) / openPrice) * 100;
   const isRising = change >= 0;
+
+  // Calculate max volume for depth bars normalization
+  const maxBidVol = Math.max(...book.bids.slice(0, 15).map(o => o.remainingQuantity), 1);
+  const maxAskVol = Math.max(...book.asks.slice(0, 15).map(o => o.remainingQuantity), 1);
+  const maxVol = Math.max(maxBidVol, maxAskVol);
 
   return (
     <motion.div 
@@ -71,26 +75,37 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
              </div>
 
              {/* Order Book */}
-             <div className="w-full lg:w-[300px] bg-stone-900 flex flex-col h-[250px] lg:h-auto">
-                 <div className="p-2 bg-stone-800 text-xs font-bold text-stone-400 flex justify-between">
-                     <span>价格 (Price)</span>
-                     <span>数量 (Size)</span>
+             <div className="w-full lg:w-[320px] bg-stone-900 flex flex-col h-[300px] lg:h-auto border-l border-stone-800">
+                 <div className="p-2 bg-stone-800 text-xs font-bold text-stone-400 flex justify-between uppercase tracking-wider">
+                     <span>Price (oz)</span>
+                     <span>Qty</span>
                  </div>
                  
-                 {/* Asks (Sells) */}
-                 <div className="flex-1 overflow-y-auto flex flex-col-reverse custom-scrollbar border-b border-stone-800 min-h-0">
-                    {book.asks.slice(0, 15).reverse().map((order, i) => (
-                        <div key={order.id} className="flex justify-between px-2 py-1 text-xs font-mono hover:bg-stone-800">
-                             <span className="text-red-400">{order.price.toFixed(2)}</span>
-                             <span className="text-stone-300">{(order.remainingQuantity).toFixed(0)}</span>
+                 {/* Asks (Sells) - Typically displayed top-down from High to Low, or reverse. 
+                     Standard Vertical LOB: Asks on top (High -> Low), Bids on bottom (High -> Low)
+                     But visually it's often: Asks (High -> Low) ... Mid Price ... Bids (High -> Low)
+                     Let's do: Asks (Reverse: High to Low) then Bids.
+                 */}
+                 <div className="flex-1 overflow-y-auto flex flex-col-reverse custom-scrollbar min-h-0 relative">
+                    {book.asks.slice(0, 15).reverse().map((order) => (
+                        <div key={order.id} className="flex justify-between px-2 py-0.5 text-xs font-mono hover:bg-stone-800 relative group">
+                             {/* Depth Bar */}
+                             <div 
+                                className="absolute right-0 top-0 bottom-0 bg-red-900/20 transition-all duration-300" 
+                                style={{ width: `${(order.remainingQuantity / maxVol) * 100}%` }}
+                             ></div>
+                             
+                             <span className="text-red-400 relative z-10">{order.price.toFixed(2)}</span>
+                             <span className="text-stone-300 relative z-10">{(order.remainingQuantity).toFixed(0)}</span>
                         </div>
                     ))}
+                    {book.asks.length === 0 && <div className="text-center text-stone-600 text-xs py-4 flex-1 flex items-center justify-center">无卖盘 (No Sellers)</div>}
                  </div>
 
                  {/* Spread Info */}
-                 <div className="p-2 bg-stone-950 text-center font-mono text-sm border-y border-stone-800 shrink-0">
-                     <span className="text-stone-500">价差: </span>
-                     <span className="text-white">
+                 <div className="p-2 bg-stone-950 text-center font-mono text-sm border-y border-stone-800 shrink-0 z-10 shadow-sm flex justify-between items-center px-4">
+                     <span className="text-stone-500 text-xs">SPREAD</span>
+                     <span className="text-white font-bold">
                          {book.asks.length > 0 && book.bids.length > 0 
                             ? (book.asks[0].price - book.bids[0].price).toFixed(2) 
                             : '-'}
@@ -98,13 +113,20 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
                  </div>
 
                  {/* Bids (Buys) */}
-                 <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                    {book.bids.slice(0, 15).map((order, i) => (
-                        <div key={order.id} className="flex justify-between px-2 py-1 text-xs font-mono hover:bg-stone-800">
-                             <span className="text-emerald-400">{order.price.toFixed(2)}</span>
-                             <span className="text-stone-300">{(order.remainingQuantity).toFixed(0)}</span>
+                 <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 relative">
+                    {book.bids.slice(0, 15).map((order) => (
+                        <div key={order.id} className="flex justify-between px-2 py-0.5 text-xs font-mono hover:bg-stone-800 relative group">
+                             {/* Depth Bar */}
+                             <div 
+                                className="absolute right-0 top-0 bottom-0 bg-emerald-900/20 transition-all duration-300" 
+                                style={{ width: `${(order.remainingQuantity / maxVol) * 100}%` }}
+                             ></div>
+
+                             <span className="text-emerald-400 relative z-10">{order.price.toFixed(2)}</span>
+                             <span className="text-stone-300 relative z-10">{(order.remainingQuantity).toFixed(0)}</span>
                         </div>
                     ))}
+                    {book.bids.length === 0 && <div className="text-center text-stone-600 text-xs py-4">无买盘 (No Buyers)</div>}
                  </div>
              </div>
           </div>
@@ -112,21 +134,21 @@ export const CommodityModal: React.FC<CommodityModalProps> = ({ item, cash, onCl
           {/* Action Bar */}
           <div className="p-4 bg-stone-900 border-t border-stone-800 grid grid-cols-2 gap-4 shrink-0">
               <div className="flex flex-col justify-center text-xs text-stone-500 px-2">
-                 <div className="flex justify-between">
-                    <span>余额</span>
-                    <span className="text-amber-400">{cash.toFixed(1)} oz</span>
+                 <div className="flex justify-between mb-1">
+                    <span>可用资金</span>
+                    <span className="text-amber-400 font-mono text-sm">{cash.toFixed(1)} oz</span>
                  </div>
                  <div className="flex justify-between">
-                     <span>库存</span>
-                     <span className="text-blue-300">{item.owned}</span>
+                     <span>持有库存</span>
+                     <span className="text-blue-300 font-mono text-sm">{item.owned}</span>
                  </div>
               </div>
               <div className="flex gap-2">
                   <Button className="flex-1 h-10 sm:h-12 text-sm sm:text-lg" variant="success" onClick={() => onTrade('buy', item.id)} disabled={cash < currentPrice}>
-                     买入
+                     买入 (Buy)
                   </Button>
                   <Button className="flex-1 h-10 sm:h-12 text-sm sm:text-lg" variant="danger" onClick={() => onTrade('sell', item.id)} disabled={item.owned <= 0}>
-                     卖出
+                     卖出 (Sell)
                   </Button>
               </div>
           </div>

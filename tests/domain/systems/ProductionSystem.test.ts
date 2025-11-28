@@ -14,6 +14,7 @@ const createMockState = (): GameState => ({
     day: 1, totalTicks: 0, cash: 100, mayorId: 'res_mayor',
     cityTreasury: JSON.parse(JSON.stringify(INITIAL_CITY_TREASURY)),
     bank: { 
+        system: 'FIAT_MONEY',
         reserves: 1000, moneySupply: 1000, reserveRatio: 0.1, creditMultiplier: 1.0,
         totalDeposits: 0, totalLoans: 0, depositRate: 0.001, loanRate: 0.003, 
         targetInflation: 0.02, targetUnemployment: 0.05,
@@ -51,12 +52,6 @@ const createMockState = (): GameState => ({
         migrationRate: 1.0,
         taxMultiplier: 1.0,
         minWage: 0
-    },
-    structuralAnalysis: {
-        lastCheckDay: 0,
-        results: [],
-        inflationSource: { costPush: 0, demandPull: 0, monetary: 0 },
-        logs: []
     }
 });
 

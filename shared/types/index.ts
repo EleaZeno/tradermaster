@@ -1,5 +1,4 @@
 
-
 import { ReactNode } from 'react';
 
 export enum ResourceType {
@@ -28,6 +27,8 @@ export enum WageStructure {
 export type LifecycleStage = 'STARTUP' | 'GROWTH' | 'MATURITY' | 'DECLINE';
 
 export type SkillLevel = 'NOVICE' | 'SKILLED' | 'EXPERT';
+
+export type MonetarySystemType = 'GOLD_STANDARD' | 'FIAT_MONEY';
 
 export interface Candle {
   day: number;
@@ -99,6 +100,7 @@ export interface YieldCurve {
 }
 
 export interface Bank {
+  system: MonetarySystemType;
   reserves: number; // Central Bank Reserves (High Powered Money)
   moneySupply: number; // M2 (Broad Money)
   reserveRatio: number; // Requirement (e.g. 0.1)
@@ -459,35 +461,6 @@ export interface PolicyOverrides {
   minWage: number; // Wage floor
 }
 
-// --- NEW: Structural & Stabilizer Types ---
-
-export interface StructuralCheckResult {
-    category: 'PRICE' | 'CONSUMPTION' | 'PRODUCTION' | 'INFLATION';
-    status: 'HEALTHY' | 'WARNING' | 'CRITICAL';
-    message: string;
-    score: number;
-    meta?: any;
-}
-
-export interface StabilizationAction {
-    day: number;
-    type: 'FISCAL' | 'MONETARY' | 'PARAM_TUNE';
-    description: string;
-    applied: boolean;
-}
-
-export interface StructuralAnalysis {
-    lastCheckDay: number;
-    results: StructuralCheckResult[];
-    inflationSource: {
-        costPush: number;
-        demandPull: number;
-        monetary: number;
-    };
-    logs: StabilizationAction[];
-    meta?: any;
-}
-
 export interface GameState {
   cash: number; 
   day: number;
@@ -517,9 +490,6 @@ export interface GameState {
   
   // Lab
   policyOverrides: PolicyOverrides;
-  
-  // Stabilizer
-  structuralAnalysis: StructuralAnalysis;
 }
 
 export interface AgentAdvice {

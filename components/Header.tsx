@@ -1,6 +1,6 @@
 
-import React, { memo, useState } from 'react';
-import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy, Settings, Terminal } from 'lucide-react';
+import React, { memo, useState, useEffect } from 'react';
+import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy, Settings, Terminal, Bell, Play } from 'lucide-react';
 import { LivingStandard } from '../shared/types';
 import { AchievementsModal } from './modals/AchievementsModal';
 import { SettingsModal } from './modals/SettingsModal';
@@ -8,11 +8,53 @@ import { useResponsive } from '../shared/hooks/useResponsive';
 import { getTranslation } from '../shared/utils/i18n';
 import { useGameStore } from '../shared/store/useGameStore';
 import { useShallow } from 'zustand/react/shallow';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface HeaderProps {
   onStop: () => void;
   onSetGameSpeed: (speed: number) => void;
   onToggleDevTools: () => void;
+}
+
+const NewsTicker = () => {
+    const events = useGameStore(useShallow(s => s.gameState.events));
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    useEffect(() => {
+        if (events.length === 0) return;
+        const interval = setInterval(() => {
+            setCurrentIndex(prev => (prev + 1) % events.length);
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [events.length]);
+
+    if (events.length === 0) return null;
+
+    const currentEvent = events[currentIndex];
+    
+    // Only show NEWS type events or relevant ones
+    if (currentEvent.type !== 'NEWS') return null;
+
+    const impactColor = currentEvent.impactType === 'BAD' ? 'text-red-400' : currentEvent.impactType === 'GOOD' ? 'text-emerald-400' : 'text-blue-400';
+
+    return (
+        <div className="hidden lg:flex items-center gap-2 bg-stone-950/50 px-3 py-1 rounded-full border border-stone-800 text-xs max-w-[400px] overflow-hidden">
+            <Bell size={12} className="text-amber-500 shrink-0 animate-pulse" />
+            <div className="overflow-hidden relative h-5 w-full">
+                <AnimatePresence mode='wait'>
+                    <motion.div 
+                        key={currentEvent.turnCreated + currentIndex}
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: -20, opacity: 0 }}
+                        className={`truncate ${impactColor} font-medium absolute w-full`}
+                    >
+                        {currentEvent.headline}: <span className="text-stone-400 font-normal">{currentEvent.description}</span>
+                    </motion.div>
+                </AnimatePresence>
+            </div>
+        </div>
+    );
 }
 
 export const Header = memo<HeaderProps>(({ 
@@ -21,7 +63,6 @@ export const Header = memo<HeaderProps>(({
   const [showAchievements, setShowAchievements] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
-  // Select only what is needed
   const isRunning = useGameStore(s => s.isRunning);
   const gameSpeed = useGameStore(s => s.gameSpeed);
   const cash = useGameStore(s => s.gameState.cash);
@@ -39,16 +80,19 @@ export const Header = memo<HeaderProps>(({
   return (
     <>
     <header className="fixed top-0 inset-x-0 h-16 bg-stone-900/90 backdrop-blur border-b border-stone-800 z-40 px-4 flex items-center justify-between shadow-lg">
-      <div className="flex items-center gap-2">
-         <div className="bg-gradient-to-br from-amber-500 to-yellow-600 p-1.5 rounded-lg text-white shadow-lg shadow-amber-900/20">
-            <TrendingUp size={20} />
+      <div className="flex items-center gap-4">
+         <div className="flex items-center gap-2">
+            <div className="bg-gradient-to-br from-amber-500 to-yellow-600 p-1.5 rounded-lg text-white shadow-lg shadow-amber-900/20">
+                <TrendingUp size={20} />
+            </div>
+            <div>
+            <h1 className="text-lg font-bold text-stone-100 flex items-center gap-2">
+                {t('header.title')}
+                {isDesktop && <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">Chaos Mode</span>}
+            </h1>
+            </div>
          </div>
-         <div>
-           <h1 className="text-lg font-bold text-stone-100 flex items-center gap-2">
-               {t('header.title')}
-               {isDesktop && <span className="text-stone-500 text-xs font-normal border border-stone-700 px-1 rounded ml-1">Chaos Mode</span>}
-           </h1>
-         </div>
+         <NewsTicker />
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 text-sm font-mono">
@@ -82,7 +126,7 @@ export const Header = memo<HeaderProps>(({
              <div className="flex items-center gap-2 bg-stone-800 rounded p-1 hidden sm:flex">
                  <Coffee size={14} className="ml-2 text-stone-400"/>
                  <select 
-                      className="bg-stone-800 text-xs text-stone-300 focus:outline-none"
+                      className="bg-stone-800 text-xs text-stone-300 focus:outline-none cursor-pointer"
                       value={player.livingStandard}
                       onChange={(e) => setLivingStandard(e.target.value as LivingStandard)}
                  >
@@ -110,7 +154,7 @@ export const Header = memo<HeaderProps>(({
                 onClick={onStop}
                 title={t('header.pause')}
             >
-                <Pause size={14} fill={!isRunning ? "currentColor" : "none"}/>
+                {isRunning ? <Pause size={14}/> : <Play size={14}/>}
             </button>
             
             <div className="w-px h-4 bg-stone-700 mx-1"></div>

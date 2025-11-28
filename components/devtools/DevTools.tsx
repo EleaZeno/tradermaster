@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../../shared/store/useGameStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -119,7 +120,9 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
 
                     {activeTab === 'market' && (
                         <div className="grid grid-cols-2 gap-4 h-full">
-                            {Object.entries(gameState.market).map(([itemId, book]) => (
+                            {Object.entries(gameState.market).map(([itemId, bookVal]) => {
+                                const book = bookVal as any;
+                                return (
                                 <div key={itemId} className="border border-stone-800 rounded bg-stone-900/50 flex flex-col h-64 overflow-hidden">
                                     <div className="bg-stone-800 px-2 py-1 font-bold text-white flex justify-between">
                                         <span>{itemId}</span>
@@ -129,7 +132,7 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
                                         {/* Bids */}
                                         <div className="flex-1 border-r border-stone-800 overflow-y-auto">
                                             <div className="sticky top-0 bg-stone-900 text-emerald-500 px-1 border-b border-stone-800">BIDS (Buy)</div>
-                                            {book.bids.map(o => (
+                                            {book.bids.map((o: any) => (
                                                 <div key={o.id} className="flex justify-between px-2 hover:bg-emerald-900/20">
                                                     <span>{o.price.toFixed(2)}</span>
                                                     <span className="text-stone-400">{o.remainingQuantity.toFixed(1)}</span>
@@ -139,7 +142,7 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
                                         {/* Asks */}
                                         <div className="flex-1 overflow-y-auto">
                                             <div className="sticky top-0 bg-stone-900 text-red-500 px-1 border-b border-stone-800 text-right">ASKS (Sell)</div>
-                                            {book.asks.map(o => (
+                                            {book.asks.map((o: any) => (
                                                 <div key={o.id} className="flex justify-between px-2 hover:bg-red-900/20">
                                                     <span className="text-stone-400">{o.remainingQuantity.toFixed(1)}</span>
                                                     <span>{o.price.toFixed(2)}</span>
@@ -148,7 +151,7 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     )}
 

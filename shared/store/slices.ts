@@ -1,9 +1,8 @@
 
-
 import { StateCreator } from 'zustand';
-import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure, PolicyOverrides } from '../types';
+import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure, PolicyOverrides, MonetarySystemType } from '../types';
 import { INITIAL_STATE } from '../initialState';
-import { processGameTick } from '../../domain/gameLogic';
+import { processGameTick } from '../../application/GameLoop';
 import { MarketService } from '../../domain/market/MarketService';
 import { checkAchievements, ACHIEVEMENTS } from '../../services/achievementService';
 
@@ -38,6 +37,7 @@ export interface CompanySlice {
 
 export interface BankSlice {
   updateBank: (updates: Partial<Bank>) => void;
+  setMonetarySystem: (system: MonetarySystemType) => void;
 }
 
 export interface GameSlice {
@@ -304,6 +304,21 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
 export const createBankSlice: StateCreator<GameStore, [["zustand/immer", never]], [], BankSlice> = (set) => ({
   updateBank: (updates) => set((state) => {
     Object.assign(state.gameState.bank, updates);
+  }),
+  setMonetarySystem: (system) => set((state) => {
+    state.gameState.bank.system = system;
+    state.gameState.logs.unshift(`🏦 货币制度变更为: ${system === 'GOLD_STANDARD' ? '金本位 (Gold Standard)' : '信用货币 (Fiat Money)'}`);
+    
+    // Immediate effect: Adjust Interest Rates to reflect regime change
+    if (system === 'GOLD_STANDARD') {
+        // Gold standard often had higher deflationary bias, set rates to protect reserves
+        state.gameState.bank.loanRate = 0.05; 
+        state.gameState.bank.depositRate = 0.04;
+    } else {
+        // Fiat resets to a low rate to stimulate
+        state.gameState.bank.loanRate = 0.02;
+        state.gameState.bank.depositRate = 0.01;
+    }
   }),
 });
 

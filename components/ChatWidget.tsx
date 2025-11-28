@@ -1,10 +1,8 @@
 
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Bot, Send, X, Loader2 } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
 import { ChatMessage } from '../shared/types';
-import { getFinancialAdvisorResponse } from '../infrastructure/ai/GeminiAdapter';
+import { getFinancialAdvisorResponseStream } from '../infrastructure/ai/GeminiAdapter';
 import { useGameStore } from '../shared/store/useGameStore';
 import { useGodModeData } from '../shared/hooks/useGodModeData';
 import DOMPurify from 'dompurify';
@@ -15,6 +13,9 @@ const marked = window.marked;
 export const ChatWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [streamingContent, setStreamingContent] = useState(""); 
+  const [isStreaming, setIsStreaming] = useState(false);
+  
   const chatEndRef = useRef<HTMLDivElement>(null);
   
   const chatHistory = useGameStore(s => s.gameState.chatHistory);
@@ -23,36 +24,39 @@ export const ChatWidget: React.FC = () => {
   const gameState = useGameStore(s => s.gameState);
   const godModeData = useGodModeData(gameState);
 
-  const aiMutation = useMutation({
-    mutationFn: async ({ message, history }: { message: string, history: ChatMessage[] }) => {
-      const apiHistory = history.map(c => ({ role: c.role, text: c.text }));
-      return await getFinancialAdvisorResponse(message, gameState, godModeData, apiHistory);
-    },
-    onSuccess: (data) => {
-      const currentHistory = useGameStore.getState().gameState.chatHistory;
-      const botMsg: ChatMessage = { role: 'model', text: data, timestamp: Date.now() };
-      updateChatHistory([...currentHistory, botMsg]);
-    }
-  });
-
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory, isOpen, aiMutation.isPending]);
+  }, [chatHistory, isOpen, streamingContent]);
 
   const handleSend = async () => {
-    // FIX: Corrected logic. Previously `if (input || pending)` caused it to return even if valid.
-    if (!input.trim() || aiMutation.isPending) return;
+    if (!input.trim() || isStreaming) return;
     
     const sanitizedInput = input.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    
     const userMsg: ChatMessage = { role: 'user', text: sanitizedInput, timestamp: Date.now() };
-    const newHistory = [...chatHistory, userMsg];
     
-    updateChatHistory(newHistory);
-    const msgToSend = sanitizedInput;
+    const currentHistory = [...chatHistory, userMsg];
+    updateChatHistory(currentHistory);
     setInput("");
+    
+    setIsStreaming(true);
+    setStreamingContent("");
 
-    aiMutation.mutate({ message: msgToSend, history: newHistory });
+    await getFinancialAdvisorResponseStream(
+        sanitizedInput,
+        gameState,
+        godModeData,
+        currentHistory,
+        (chunk) => {
+            setStreamingContent(prev => prev + chunk);
+        }
+    );
+
+    setIsStreaming(false);
+    setStreamingContent((finalContent) => {
+        const botMsg: ChatMessage = { role: 'model', text: finalContent, timestamp: Date.now() };
+        updateChatHistory([...currentHistory, botMsg]);
+        return ""; 
+    });
   };
 
   const renderMessageContent = (text: string) => {
@@ -78,9 +82,18 @@ export const ChatWidget: React.FC = () => {
                  />
                </div>
              ))}
-             {aiMutation.isPending && (
-                 <div className="flex items-center gap-2 text-stone-500 text-xs italic">
-                     <Loader2 size={12} className="animate-spin"/> Alpha 正在思考...
+             
+             {isStreaming && (
+                 <div className="flex justify-start">
+                     <div className="max-w-[85%] rounded-lg p-3 text-xs leading-relaxed shadow-sm bg-stone-800 text-stone-300 border border-stone-700 animate-pulse-subtle">
+                        {streamingContent ? (
+                            <div dangerouslySetInnerHTML={{ __html: renderMessageContent(streamingContent) }} />
+                        ) : (
+                            <div className="flex items-center gap-2 italic text-stone-500">
+                                <Loader2 size={12} className="animate-spin"/> 思考中...
+                            </div>
+                        )}
+                     </div>
                  </div>
              )}
              <div ref={chatEndRef}></div>
@@ -93,9 +106,9 @@ export const ChatWidget: React.FC = () => {
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder="询问经济状况..." 
                 className="flex-1 bg-stone-900 border border-stone-600 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-                disabled={aiMutation.isPending}
+                disabled={isStreaming}
              />
-             <button onClick={handleSend} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-500 disabled:opacity-50" disabled={aiMutation.isPending || !input.trim()}>
+             <button onClick={handleSend} className="bg-blue-600 text-white p-2 rounded hover:bg-blue-500 disabled:opacity-50" disabled={isStreaming || !input.trim()}>
                 <Send size={16} />
              </button>
           </div>
