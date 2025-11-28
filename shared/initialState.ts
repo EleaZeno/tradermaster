@@ -1,5 +1,5 @@
 
-import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank } from './types';
+import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank, BusinessCyclePhase, MayorPersonality } from './types';
 import { GAME_CONFIG } from './config';
 
 const generateResidents = (count: number): Resident[] => {
@@ -316,7 +316,7 @@ export const INITIAL_STATE: GameState = {
     events: [],
     netWorthHistory: [{ day: 1, value: GAME_CONFIG.INITIAL_PLAYER_CASH }],
     macroHistory: [],
-    chatHistory: [{ role: 'model', text: '微型社会模拟 v8.0 (GE Mode) 已启动。\n系统已接入 GDP 流动核算与银行信贷创造机制。', timestamp: Date.now() }],
+    chatHistory: [{ role: 'model', text: '微型社会模拟 v9.0 (Cycles Mode) 已启动。\n系统已接入经济周期监控与健康指数。', timestamp: Date.now() }],
     logs: ["🏗️ 系统初始化完成"],
     economicOverview: {
         totalResidentCash: 0, totalCorporateCash: 0, totalFundCash: 0, totalCityCash: 0, totalSystemGold: 0,
@@ -340,5 +340,11 @@ export const INITIAL_STATE: GameState = {
         migrationRate: 1.0,
         taxMultiplier: 1.0,
         minWage: 0
+    },
+    // New Initial State
+    businessCycle: BusinessCyclePhase.RECOVERY,
+    mayorPersonality: MayorPersonality.KEYNESIAN,
+    economicHealth: {
+        score: 100, stability: 100, productivity: 50, debtRisk: 0, liquidity: 100, equality: 80
     }
 };

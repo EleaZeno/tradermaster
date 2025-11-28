@@ -2,18 +2,22 @@
 import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../../shared/store/useGameStore';
 import { Card, Button } from '../../shared/components';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Line, ComposedChart, BarChart, Bar, Cell } from 'recharts';
-import { Building2, DollarSign, Activity, TrendingUp } from 'lucide-react';
+import { ResponsiveContainer, ComposedChart, Area, XAxis, YAxis, Tooltip, Line, BarChart, Bar, Cell } from 'recharts';
+import { Building2, DollarSign, Activity, TrendingUp, Scale, Coins } from 'lucide-react';
+import { getTranslation } from '../../shared/utils/i18n';
 
 export const BankingTab: React.FC = () => {
   const bank = useGameStore(s => s.gameState.bank);
   const updateBank = useGameStore(s => s.updateBank);
+  const lang = useGameStore(s => s.gameState.settings.language);
+  const setMonetarySystem = useGameStore(s => s.setMonetarySystem);
+
+  const t = (key: string) => getTranslation(key, lang);
 
   const [targetInflation, setTargetInflation] = useState(bank.targetInflation);
   const [targetUnemployment, setTargetUnemployment] = useState(bank.targetUnemployment);
 
   useEffect(() => {
-     // Check if values actually differ before setting state to avoid render loops
      if (targetInflation !== bank.targetInflation) {
          setTargetInflation(bank.targetInflation);
      }
@@ -26,6 +30,11 @@ export const BankingTab: React.FC = () => {
       updateBank({ targetInflation, targetUnemployment });
   };
 
+  const toggleSystem = () => {
+      const newSystem = bank.system === 'GOLD_STANDARD' ? 'FIAT_MONEY' : 'GOLD_STANDARD';
+      setMonetarySystem(newSystem);
+  };
+
   const yieldCurveData = [
       { name: '1D', rate: bank.yieldCurve.rate1d * 100 },
       { name: '30D', rate: bank.yieldCurve.rate30d * 100 },
@@ -36,30 +45,33 @@ export const BankingTab: React.FC = () => {
     <div className="space-y-6 animate-in fade-in">
         <div className="bg-gradient-to-r from-stone-900 to-emerald-950 p-4 rounded-xl border border-emerald-900/50">
             <h2 className="text-xl font-bold text-emerald-400 flex items-center gap-2 mb-2">
-                <Building2 /> 中央银行控制台
+                <Building2 /> {t('bank.title')}
             </h2>
             <p className="text-sm text-stone-400">
-                央行根据泰勒规则 (Taylor Rule) 自动调节利率。请设定政策目标以引导经济。
+                {t('bank.subtitle')}
             </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-stone-900 border-stone-800" title="央行储备">
+            <Card className="bg-stone-900 border-stone-800" title={t('bank.reserves')}>
                 <div className="flex items-center gap-4">
                     <div className="p-3 bg-emerald-900/30 rounded-full border border-emerald-700">
                         <Building2 size={24} className="text-emerald-500" />
                     </div>
                     <div>
-                        <div className="text-sm text-stone-500">总储备金 (Reserves)</div>
+                        <div className="text-sm text-stone-500">{t('bank.system')}</div>
+                        <div className="text-lg font-bold text-white mb-1">
+                            {bank.system === 'GOLD_STANDARD' ? t('bank.gold') : t('bank.fiat')}
+                        </div>
                         <div className="text-2xl font-bold font-mono text-emerald-400">{Math.floor(bank.reserves).toLocaleString()} oz</div>
                     </div>
                 </div>
             </Card>
 
-            <Card className="bg-stone-900 border-stone-800" title="货币政策目标">
+            <Card className="bg-stone-900 border-stone-800" title={t('bank.policy_goals')}>
                  <div className="space-y-4">
                      <div className="flex justify-between items-center text-sm">
-                         <label className="text-stone-400">通胀目标 ($\pi^*$)</label>
+                         <label className="text-stone-400">{t('bank.inflation_target')} ($\pi^*$)</label>
                          <div className="flex items-center gap-1">
                             <input 
                                 type="number" step="0.01" 
@@ -71,7 +83,7 @@ export const BankingTab: React.FC = () => {
                          </div>
                      </div>
                      <div className="flex justify-between items-center text-sm">
-                         <label className="text-stone-400">失业率目标 ($u^*$)</label>
+                         <label className="text-stone-400">{t('bank.unemployment_target')} ($u^*$)</label>
                          <div className="flex items-center gap-1">
                             <input 
                                 type="number" step="0.01" 
@@ -82,11 +94,11 @@ export const BankingTab: React.FC = () => {
                             <span className="text-stone-500 text-xs">%</span>
                          </div>
                      </div>
-                     <Button size="sm" variant="primary" className="w-full mt-2" onClick={handleApply}>应用政策</Button>
+                     <Button size="sm" variant="primary" className="w-full mt-2" onClick={handleApply}>{t('bank.apply')}</Button>
                  </div>
             </Card>
 
-            <Card className="bg-stone-900 border-stone-800" title="收益率曲线 (Yield Curve)">
+            <Card className="bg-stone-900 border-stone-800" title={t('bank.yield_curve')}>
                 <div className="h-32 w-full">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={yieldCurveData}>
@@ -104,7 +116,7 @@ export const BankingTab: React.FC = () => {
             </Card>
         </div>
 
-        <Card title="宏观调控数据 (利率 & 通胀)" className="bg-stone-900 border-stone-800 h-80">
+        <Card title="Macro Data (Rates & Inflation)" className="bg-stone-900 border-stone-800 h-80">
             <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={bank.history}>
                     <defs>
@@ -120,23 +132,23 @@ export const BankingTab: React.FC = () => {
                         contentStyle={{backgroundColor: '#1c1917', border: '1px solid #444', fontSize: '12px'}}
                         labelStyle={{color: '#9ca3af'}}
                     />
-                    <Area yAxisId="left" type="monotone" dataKey="reserves" stroke="#10b981" fillOpacity={1} fill="url(#colorReserves)" name="储备金" />
-                    <Line yAxisId="right" type="monotone" dataKey="rates" stroke="#f59e0b" dot={false} strokeWidth={2} name="基准利率" />
-                    <Line yAxisId="right" type="monotone" dataKey="inflation" stroke="#ef4444" dot={false} strokeWidth={2} name="通胀率 (周)" />
+                    <Area yAxisId="left" type="monotone" dataKey="reserves" stroke="#10b981" fillOpacity={1} fill="url(#colorReserves)" name="Reserves" />
+                    <Line yAxisId="right" type="monotone" dataKey="rates" stroke="#f59e0b" dot={false} strokeWidth={2} name="Rate" />
+                    <Line yAxisId="right" type="monotone" dataKey="inflation" stroke="#ef4444" dot={false} strokeWidth={2} name="Inflation" />
                 </ComposedChart>
             </ResponsiveContainer>
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card title="活跃贷款簿" className="bg-stone-900 border-stone-800">
+            <Card title={t('bank.loans')} className="bg-stone-900 border-stone-800">
                 <div className="overflow-x-auto max-h-60 overflow-y-auto custom-scrollbar">
                     <table className="w-full text-xs text-left text-stone-400">
                         <thead className="text-stone-500 uppercase bg-stone-950 sticky top-0">
                             <tr>
-                                <th className="px-4 py-2">贷款ID</th>
-                                <th className="px-4 py-2">借款人</th>
-                                <th className="px-4 py-2 text-right">剩余本金</th>
-                                <th className="px-4 py-2 text-right">到期日</th>
+                                <th className="px-4 py-2">ID</th>
+                                <th className="px-4 py-2">Borrower</th>
+                                <th className="px-4 py-2 text-right">Principal</th>
+                                <th className="px-4 py-2 text-right">Due</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -149,21 +161,21 @@ export const BankingTab: React.FC = () => {
                                 </tr>
                             ))}
                             {bank.loans.length === 0 && (
-                                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-600">无活跃贷款</td></tr>
+                                <tr><td colSpan={4} className="px-4 py-4 text-center text-stone-600">No active loans</td></tr>
                             )}
                         </tbody>
                     </table>
                 </div>
             </Card>
 
-            <Card title="存款簿" className="bg-stone-900 border-stone-800">
+            <Card title={t('bank.deposits')} className="bg-stone-900 border-stone-800">
                  <div className="overflow-x-auto max-h-60 overflow-y-auto custom-scrollbar">
                     <table className="w-full text-xs text-left text-stone-400">
                         <thead className="text-stone-500 uppercase bg-stone-950 sticky top-0">
                             <tr>
-                                <th className="px-4 py-2">账户</th>
-                                <th className="px-4 py-2 text-right">余额</th>
-                                <th className="px-4 py-2 text-right">年化利率(APY)</th>
+                                <th className="px-4 py-2">Account</th>
+                                <th className="px-4 py-2 text-right">Balance</th>
+                                <th className="px-4 py-2 text-right">APY</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -175,7 +187,7 @@ export const BankingTab: React.FC = () => {
                                 </tr>
                             ))}
                              {bank.deposits.length === 0 && (
-                                <tr><td colSpan={3} className="px-4 py-4 text-center text-stone-600">无活跃存款</td></tr>
+                                <tr><td colSpan={3} className="px-4 py-4 text-center text-stone-600">No active deposits</td></tr>
                             )}
                         </tbody>
                     </table>

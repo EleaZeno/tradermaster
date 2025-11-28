@@ -1,5 +1,5 @@
 
-import { GameState, ResourceType, ProductType, IndustryType } from '../../shared/types';
+import { GameState, ResourceType, ProductType, IndustryType, EconomicHealth } from '../../shared/types';
 
 export interface EconomicHealthSnapshot {
   timestamp: number;
@@ -43,17 +43,72 @@ export interface EconomicHealthSnapshot {
 }
 
 export class HealthCheckService {
+  
+  static updateHealthIndex(state: GameState): void {
+      const history = state.macroHistory;
+      if (history.length < 5) return; // Need data
+
+      const current = history[history.length - 1];
+      
+      // 1. Stability (Inflation close to 2% and low volatility)
+      // Score drops if inflation > 10% or < -2%
+      const infl = current.inflation * 100; // percent
+      let stability = 100 - Math.abs(infl - 2) * 5; 
+      stability = Math.max(0, Math.min(100, stability));
+
+      // 2. Productivity (Real GDP per capita trend)
+      // Simple proxy: Unemployment low = good, GDP high = good
+      const unemp = current.unemployment * 100;
+      let productivity = 100 - (unemp * 3); // 5% unemp -> 85 score
+      if (state.population.averageHappiness < 50) productivity -= 20;
+      productivity = Math.max(0, Math.min(100, productivity));
+
+      // 3. Debt Risk (Leverage)
+      // Corporate Cash vs Debt
+      const totalDebt = state.bank.totalLoans;
+      const totalEquity = state.companies.reduce((s, c) => s + (c.sharePrice * c.totalShares), 0);
+      const leverage = totalEquity > 0 ? totalDebt / totalEquity : 0;
+      // High leverage (> 2.0) is risky
+      let debtRisk = 100 - (leverage * 20);
+      debtRisk = Math.max(0, Math.min(100, debtRisk));
+
+      // 4. Liquidity (Bank Reserves sufficiency)
+      const reserveRatio = state.bank.totalDeposits > 0 ? state.bank.reserves / state.bank.totalDeposits : 1.0;
+      // Target 10% (0.1). If < 0.1, score drops fast.
+      let liquidity = 100;
+      if (reserveRatio < 0.1) liquidity = reserveRatio * 1000; // 0.05 -> 50
+      liquidity = Math.max(0, Math.min(100, liquidity));
+
+      // 5. Equality (Gini Coefficient proxy via Affordability)
+      // We don't have Gini calc here every tick, so use employment + wage/price
+      const breadPrice = state.products[ProductType.BREAD].marketPrice;
+      const wage = state.population.averageWage;
+      const purchasingPower = wage / Math.max(0.1, breadPrice); // Loaves per day
+      // 2 loaves is survival. 5 is good.
+      let equality = Math.min(100, purchasingPower * 20);
+
+      // Composite Score
+      const totalScore = (stability * 0.3) + (productivity * 0.2) + (debtRisk * 0.2) + (liquidity * 0.15) + (equality * 0.15);
+
+      state.economicHealth = {
+          score: parseFloat(totalScore.toFixed(1)),
+          stability: parseFloat(stability.toFixed(1)),
+          productivity: parseFloat(productivity.toFixed(1)),
+          debtRisk: parseFloat(debtRisk.toFixed(1)),
+          liquidity: parseFloat(liquidity.toFixed(1)),
+          equality: parseFloat(equality.toFixed(1))
+      };
+  }
+
   static captureSnapshot(state: GameState): EconomicHealthSnapshot {
     const history = state.macroHistory;
     const currentMacro = history[history.length - 1] || { gdp: 0, inflation: 0, unemployment: 0, moneySupply: 0 };
     const prevMacro = history[history.length - 8] || currentMacro;
 
-    // Macro
     const gdp = currentMacro.gdp;
     const gdpGrowth = prevMacro.gdp > 0 ? (gdp - prevMacro.gdp) / prevMacro.gdp : 0;
     const m2 = state.bank.moneySupply;
     
-    // Markets
     const markets: EconomicHealthSnapshot['markets'] = {};
     const trackItems = [ResourceType.GRAIN, ProductType.BREAD];
     
@@ -73,18 +128,15 @@ export class HealthCheckService {
         };
     });
 
-    // Companies
     const activeCompanies = state.companies.filter(c => !c.isBankrupt);
     const avgMargin = activeCompanies.reduce((s, c) => s + (c.margin || 0), 0) / (activeCompanies.length || 1);
     const avgCash = activeCompanies.reduce((s, c) => s + c.cash, 0) / (activeCompanies.length || 1);
     const avgTobin = activeCompanies.reduce((s, c) => s + (c.tobinQ || 0), 0) / (activeCompanies.length || 1);
     
-    // Labor
     const employed = state.population.total - state.population.unemployed;
     const totalWages = state.companies.reduce((s, c) => s + (c.employees * c.wageOffer), 0);
     const laborDemand = state.companies.reduce((s, c) => s + Math.max(0, c.targetEmployees - c.employees), 0);
     
-    // Finance
     const totalDebt = state.bank.totalLoans;
     const totalEquity = activeCompanies.reduce((s, c) => s + (c.sharePrice * c.totalShares), 0);
 

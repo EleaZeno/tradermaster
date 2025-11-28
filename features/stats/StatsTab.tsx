@@ -1,19 +1,23 @@
 
 import React, { useMemo } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, AreaChart, Area, XAxis, YAxis } from 'recharts';
-import { ResourceType, ProductType, EconomicSnapshot } from '../../shared/types';
+import { ResourceType, ProductType, BusinessCyclePhase, EconomicSnapshot } from '../../shared/types';
 import { Card } from '../../shared/components';
 import { RESOURCE_ICONS } from '../../shared/assets';
 import { useGameStore } from '../../shared/store/useGameStore';
 import { SupplyChainViz } from './SupplyChainViz';
 import { CompetitionMatrix } from './CompetitionMatrix';
+import { getTranslation } from '../../shared/utils/i18n';
 import { 
-  ArrowUp, ArrowDown, Coins, Factory, Scale, AlertCircle, ShoppingCart, Package, Users, PieChart as PieChartIcon, Landmark, Smile, Activity
+  ArrowUp, ArrowDown, Coins, Factory, Scale, AlertCircle, ShoppingCart, Package, Users, Smile, Activity, LayoutDashboard, HeartPulse
 } from 'lucide-react';
 
-const NAME_MAP: Record<string, string> = {
-  [ResourceType.GRAIN]: "粮食",
-  [ProductType.BREAD]: "面包"
+const CYCLE_COLORS: Record<BusinessCyclePhase, string> = {
+    [BusinessCyclePhase.EXPANSION]: 'text-emerald-400',
+    [BusinessCyclePhase.PEAK]: 'text-amber-400',
+    [BusinessCyclePhase.RECESSION]: 'text-orange-500',
+    [BusinessCyclePhase.DEPRESSION]: 'text-red-600',
+    [BusinessCyclePhase.RECOVERY]: 'text-blue-400',
 };
 
 export const StatsTab: React.FC = () => {
@@ -21,25 +25,26 @@ export const StatsTab: React.FC = () => {
   const population = useGameStore(s => s.gameState.population);
   const companies = useGameStore(s => s.gameState.companies);
   const cityTreasury = useGameStore(s => s.gameState.cityTreasury);
-  const resources = useGameStore(s => s.gameState.resources);
-  const products = useGameStore(s => s.gameState.products);
   const macroHistory = useGameStore(s => s.gameState.macroHistory);
+  const cycle = useGameStore(s => s.gameState.businessCycle);
+  const health = useGameStore(s => s.gameState.economicHealth);
+  const lang = useGameStore(s => s.gameState.settings.language);
   
+  const t = (key: string) => getTranslation(key, lang);
+
   const totalResidentCash = population.residents.reduce((sum, r) => sum + r.cash, 0);
   const totalCorporateCash = companies.reduce((sum, c) => sum + c.cash, 0);
   const totalCityCash = cityTreasury.cash;
-  const totalSystemGold = economicOverview.totalSystemGold; // M0 + Loans approximation
+  const totalSystemGold = economicOverview.totalSystemGold; 
 
   const moneySupplyData = [
-      { name: '居民持有', value: totalResidentCash, color: '#3b82f6' }, 
-      { name: '企业持有', value: totalCorporateCash, color: '#10b981' }, 
-      { name: '国库持有', value: totalCityCash, color: '#f59e0b' }
+      { name: t('res.residents'), value: totalResidentCash, color: '#3b82f6' }, 
+      { name: t('res.companies'), value: totalCorporateCash, color: '#10b981' }, 
+      { name: t('city.treasury'), value: totalCityCash, color: '#f59e0b' }
   ].filter(d => d.value > 0);
 
-  const cpi = (resources[ResourceType.GRAIN].currentPrice + products[ProductType.BREAD].marketPrice).toFixed(2);
   const sentiment = population.consumerSentiment || 50;
 
-  // Prepare GDP Data
   const gdpData = useMemo(() => {
       return macroHistory.slice(-30).map(h => ({
           day: h.day,
@@ -52,28 +57,66 @@ export const StatsTab: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in">
       
-      {/* Macro Indicators */}
+      <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-stone-900 rounded-lg border border-stone-800">
+                <LayoutDashboard size={24} className="text-stone-200"/>
+            </div>
+            <div>
+                <h2 className="text-2xl font-bold text-white tracking-tight">{t('nav.dashboard')}</h2>
+                <div className="flex items-center gap-2 text-sm font-mono">
+                    <span className="text-stone-500">{t('stats.cycle')}:</span>
+                    <span className={`font-bold ${CYCLE_COLORS[cycle]}`}>{t(`cycle.${cycle}`)}</span>
+                </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 bg-stone-900 px-4 py-2 rounded-lg border border-stone-800">
+              <HeartPulse className={health.score > 80 ? "text-emerald-500" : health.score > 50 ? "text-amber-500" : "text-red-500"} size={20} />
+              <div>
+                  <div className="text-[10px] text-stone-500 uppercase tracking-wider">{t('stats.health_score')}</div>
+                  <div className="text-xl font-bold text-white leading-none">{health.score} <span className="text-sm text-stone-600">/ 100</span></div>
+              </div>
+          </div>
+      </div>
+
+      {/* Health Vitals */}
+      <div className="grid grid-cols-5 gap-2 text-center text-xs font-mono bg-stone-900 p-3 rounded-xl border border-stone-800">
+          <div>
+              <div className="text-stone-500 mb-1">{t('health.stability')}</div>
+              <div className={health.stability > 70 ? "text-emerald-400" : "text-red-400"}>{health.stability}</div>
+          </div>
+          <div>
+              <div className="text-stone-500 mb-1">{t('health.productivity')}</div>
+              <div className={health.productivity > 70 ? "text-emerald-400" : "text-red-400"}>{health.productivity}</div>
+          </div>
+          <div>
+              <div className="text-stone-500 mb-1">{t('health.debt_risk')}</div>
+              <div className={health.debtRisk > 70 ? "text-emerald-400" : "text-red-400"}>{health.debtRisk}</div>
+          </div>
+          <div>
+              <div className="text-stone-500 mb-1">{t('health.liquidity')}</div>
+              <div className={health.liquidity > 70 ? "text-emerald-400" : "text-red-400"}>{health.liquidity}</div>
+          </div>
+          <div>
+              <div className="text-stone-500 mb-1">{t('health.equality')}</div>
+              <div className={health.equality > 70 ? "text-emerald-400" : "text-red-400"}>{health.equality}</div>
+          </div>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="bg-stone-900 border-stone-800 border-l-4 border-l-amber-500">
              <div className="flex items-center gap-3 mb-2">
                  <div className="p-2 bg-amber-950/50 rounded-lg text-amber-500"><Coins size={18}/></div>
-                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">M2 货币供应</div>
+                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">{t('stats.money_supply')}</div>
              </div>
              <div className="text-2xl font-mono text-amber-400 font-bold ml-1">{Math.floor(totalSystemGold).toLocaleString()} <span className="text-sm text-stone-600">oz</span></div>
-          </Card>
-
-          <Card className="bg-stone-900 border-stone-800 border-l-4 border-l-purple-500">
-             <div className="flex items-center gap-3 mb-2">
-                 <div className="p-2 bg-purple-950/50 rounded-lg text-purple-400"><Scale size={18}/></div>
-                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">CPI 物价指数</div>
-             </div>
-             <div className="text-2xl font-mono text-purple-400 font-bold ml-1">{cpi}</div>
           </Card>
 
           <Card className="bg-stone-900 border-stone-800 border-l-4 border-l-pink-500">
              <div className="flex items-center gap-3 mb-2">
                  <div className="p-2 bg-pink-950/50 rounded-lg text-pink-400"><Smile size={18}/></div>
-                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">消费者信心</div>
+                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">{t('stats.consumer_sentiment')}</div>
              </div>
              <div className="text-2xl font-mono text-pink-400 font-bold ml-1">{sentiment} <span className="text-sm text-stone-600">/ 100</span></div>
           </Card>
@@ -81,14 +124,14 @@ export const StatsTab: React.FC = () => {
           <Card className="bg-stone-900 border-stone-800 border-l-4 border-l-emerald-500">
              <div className="flex items-center gap-3 mb-2">
                  <div className="p-2 bg-emerald-950/50 rounded-lg text-emerald-400"><Factory size={18}/></div>
-                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">企业总现金</div>
+                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">{t('stats.corp_cash')}</div>
              </div>
              <div className="text-2xl font-mono text-emerald-400 font-bold ml-1">{Math.floor(totalCorporateCash).toLocaleString()} <span className="text-sm text-stone-600">oz</span></div>
           </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="GDP 构成 (C+I+G)" className="bg-stone-900 border-stone-800 h-80">
+          <Card title={t('stats.gdp_composition')} className="bg-stone-900 border-stone-800 h-80">
              <div className="w-full h-full pb-4">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={gdpData}>
@@ -96,15 +139,15 @@ export const StatsTab: React.FC = () => {
                         <YAxis stroke="#666" tick={{fontSize: 10}} />
                         <Tooltip contentStyle={{backgroundColor:'#1c1917', border: '1px solid #444'}} />
                         <Legend verticalAlign="top" iconType="circle"/>
-                        <Area type="monotone" dataKey="c" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="消费 (C)" />
-                        <Area type="monotone" dataKey="i" stackId="1" stroke="#10b981" fill="#10b981" name="投资 (I)" />
-                        <Area type="monotone" dataKey="g" stackId="1" stroke="#f59e0b" fill="#f59e0b" name="政府 (G)" />
+                        <Area type="monotone" dataKey="c" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="C" />
+                        <Area type="monotone" dataKey="i" stackId="1" stroke="#10b981" fill="#10b981" name="I" />
+                        <Area type="monotone" dataKey="g" stackId="1" stroke="#f59e0b" fill="#f59e0b" name="G" />
                     </AreaChart>
                 </ResponsiveContainer>
              </div>
           </Card>
 
-          <Card title="货币供应分布 (M2 Components)" className="bg-stone-900 border-stone-800 h-80">
+          <Card title={t('stats.money_dist')} className="bg-stone-900 border-stone-800 h-80">
              <div className="w-full h-full relative">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -120,29 +163,29 @@ export const StatsTab: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Card title="产业链全景图 (Supply Chain)" className="bg-stone-900 border-stone-800">
+          <Card title={t('stats.supply_chain')} className="bg-stone-900 border-stone-800">
               <SupplyChainViz />
           </Card>
           <CompetitionMatrix />
       </div>
 
       <Card 
-        title="📜 经济审计总账 (实物守恒 Audit)" 
+        title={t('stats.audit')}
         className="bg-stone-950 border-stone-800 border-2 border-double"
-        action={<div className="flex items-center gap-1 text-xs text-stone-500"><AlertCircle size={12}/> 数据实时监控</div>}
+        action={<div className="flex items-center gap-1 text-xs text-stone-500"><AlertCircle size={12}/> Live Monitor</div>}
       >
           <div className="overflow-x-auto">
              <table className="w-full text-sm text-left text-stone-400">
                  <thead className="text-xs uppercase bg-stone-900 text-stone-500">
                      <tr>
-                         <th className="px-3 py-3 rounded-tl-lg">商品</th>
-                         <th className="px-3 py-3 text-right"><div className="flex items-center justify-end gap-1"><Package size={12}/> 总量</div></th>
-                         <th className="px-3 py-3 text-right text-emerald-500"><div className="flex items-center justify-end gap-1"><Factory size={12}/> 产出</div></th>
-                         <th className="px-3 py-3 text-right text-red-500"><div className="flex items-center justify-end gap-1"><ShoppingCart size={12}/> 消耗</div></th>
-                         <th className="px-3 py-3 text-right text-stone-500"><div className="flex items-center justify-end gap-1"><AlertCircle size={12}/> 损耗</div></th>
-                         <th className="px-3 py-3 text-right text-blue-400"><div className="flex items-center justify-end gap-1"><Users size={12}/> 居民仓</div></th>
-                         <th className="px-3 py-3 text-right text-emerald-400"><div className="flex items-center justify-end gap-1"><Landmark size={12}/> 企业仓</div></th>
-                         <th className="px-3 py-3 rounded-tr-lg text-right text-amber-400"><div className="flex items-center justify-end gap-1"><Scale size={12}/> 市场</div></th>
+                         <th className="px-3 py-3 rounded-tl-lg">Item</th>
+                         <th className="px-3 py-3 text-right"><div className="flex items-center justify-end gap-1"><Package size={12}/> {t('res.total')}</div></th>
+                         <th className="px-3 py-3 text-right text-emerald-500"><div className="flex items-center justify-end gap-1"><Factory size={12}/> {t('res.produced')}</div></th>
+                         <th className="px-3 py-3 text-right text-red-500"><div className="flex items-center justify-end gap-1"><ShoppingCart size={12}/> {t('res.consumed')}</div></th>
+                         <th className="px-3 py-3 text-right text-stone-500"><div className="flex items-center justify-end gap-1"><AlertCircle size={12}/> {t('res.spoiled')}</div></th>
+                         <th className="px-3 py-3 text-right text-blue-400"><div className="flex items-center justify-end gap-1"><Users size={12}/> {t('res.residents')}</div></th>
+                         <th className="px-3 py-3 text-right text-emerald-400"><div className="flex items-center justify-end gap-1"><Scale size={12}/> {t('res.companies')}</div></th>
+                         <th className="px-3 py-3 rounded-tr-lg text-right text-amber-400"><div className="flex items-center justify-end gap-1"><Activity size={12}/> {t('res.market')}</div></th>
                      </tr>
                  </thead>
                  <tbody className="divide-y divide-stone-800/50">
@@ -153,7 +196,7 @@ export const StatsTab: React.FC = () => {
                          <tr key={key} className="hover:bg-stone-900 transition-colors">
                              <td className="px-3 py-3 flex items-center gap-2 font-medium">
                                 {/* @ts-ignore */}
-                                {RESOURCE_ICONS[key]} <span className="text-stone-200">{NAME_MAP[key] || key}</span>
+                                {RESOURCE_ICONS[key]} <span className="text-stone-200">{t(`res.${key}`)}</span>
                              </td>
                              <td className="px-3 py-3 text-right font-mono font-bold text-white">
                                 <div className="flex items-center justify-end gap-1">

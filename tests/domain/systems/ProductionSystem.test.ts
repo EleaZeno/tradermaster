@@ -1,8 +1,7 @@
 
-
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ProductionSystem } from '../../../domain/systems/ProductionSystem';
-import { GameState, ResourceType, ProductType, FlowStats, OrderBook, GameContext } from '../../../shared/types';
+import { GameState, ResourceType, ProductType, FlowStats, OrderBook, GameContext, BusinessCyclePhase, MayorPersonality } from '../../../shared/types';
 import { INITIAL_POPULATION, INITIAL_COMPANIES, INITIAL_RESOURCES, INITIAL_PRODUCTS, INITIAL_CITY_TREASURY } from '../../../shared/initialState';
 
 // Helper to create empty books
@@ -52,6 +51,11 @@ const createMockState = (): GameState => ({
         migrationRate: 1.0,
         taxMultiplier: 1.0,
         minWage: 0
+    },
+    businessCycle: BusinessCyclePhase.RECOVERY,
+    mayorPersonality: MayorPersonality.KEYNESIAN,
+    economicHealth: {
+        score: 100, stability: 100, productivity: 50, debtRisk: 0, liquidity: 100, equality: 80
     }
 });
 

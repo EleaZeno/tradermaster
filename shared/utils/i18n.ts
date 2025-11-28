@@ -1,6 +1,7 @@
 
 export const TRANSLATIONS: Record<string, Record<string, string>> = {
   zh: {
+    // Settings & Header
     'settings.title': '游戏设置',
     'settings.language': '语言',
     'settings.notifications': '通知过滤',
@@ -12,9 +13,152 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     'header.achievements': '成就',
     'header.pause': '暂停',
     'header.resume': '继续',
-    'toast.clear': '清除全部'
+    'header.terminal': '终端',
+    'toast.clear': '清除全部',
+
+    // Nav
+    'nav.core': '核心系统',
+    'nav.market': '市场系统',
+    'nav.city': '城市系统',
+    'nav.dashboard': '经济仪表盘',
+    'nav.banking': '货币政策',
+    'nav.validation': 'AI 验证实验室',
+    'nav.commodities': '商品现货 (LOB)',
+    'nav.companies': '股票交易所',
+    'nav.cityhall': '市政厅 & 人口',
+    'nav.empire': '我的商业帝国',
+    'nav.nocompany': '暂无公司',
+
+    // Stats / Dashboard
+    'stats.health_score': '健康指数',
+    'stats.money_supply': 'M2 货币供应',
+    'stats.consumer_sentiment': '消费者信心',
+    'stats.corp_cash': '企业总现金',
+    'stats.gdp_composition': 'GDP 构成 (C+I+G)',
+    'stats.money_dist': '货币供应分布',
+    'stats.supply_chain': '产业链全景图',
+    'stats.competition': '竞争格局矩阵',
+    'stats.audit': '经济审计总账 (实物守恒)',
+    'stats.cycle': '商业周期',
+    'cycle.EXPANSION': '扩张期',
+    'cycle.PEAK': '经济过热',
+    'cycle.RECESSION': '衰退期',
+    'cycle.DEPRESSION': '大萧条',
+    'cycle.RECOVERY': '复苏期',
+    'health.stability': '稳定性',
+    'health.productivity': '生产力',
+    'health.debt_risk': '债务风险',
+    'health.liquidity': '流动性',
+    'health.equality': '平等度',
+
+    // Resources & Products
+    'res.GRAIN': '粮食',
+    'res.BREAD': '面包',
+    'res.total': '总量',
+    'res.produced': '产出',
+    'res.consumed': '消耗',
+    'res.spoiled': '损耗',
+    'res.residents': '居民仓',
+    'res.companies': '企业仓',
+    'res.market': '市场',
+
+    // Banking
+    'bank.title': '中央银行控制台',
+    'bank.subtitle': '央行根据泰勒规则 (Taylor Rule) 自动调节利率。',
+    'bank.reserves': '央行储备',
+    'bank.policy_goals': '货币政策目标',
+    'bank.inflation_target': '通胀目标',
+    'bank.unemployment_target': '失业率目标',
+    'bank.yield_curve': '收益率曲线',
+    'bank.apply': '应用政策',
+    'bank.loans': '活跃贷款簿',
+    'bank.deposits': '存款簿',
+    'bank.system': '货币制度',
+    'bank.regime': '当前制度',
+    'bank.switch': '切换制度',
+    'bank.gold': '金本位 (Gold Standard)',
+    'bank.fiat': '信用货币 (Fiat Money)',
+
+    // City Hall
+    'city.mayor': '现任市长',
+    'city.fiscal_status': '自动财政状态',
+    'city.income_stmt': '昨日收支明细',
+    'city.revenue': '总收入',
+    'city.expense': '总支出',
+    'city.net': '净赤字/盈余',
+    'city.treasury': '国库储备',
+    'city.absorption': '市场吸纳率',
+    'city.tax_rates': '实时调节税率',
+    'city.tax_income': '个税',
+    'city.tax_corp': '企税',
+    'city.tax_consumption': '消费税',
+    'city.population': '居民数据库',
+    'city.search': '搜索居民...',
+    'city.col_name': '姓名 (ID)',
+    'city.col_job': '职业 & 雇主',
+    'city.col_prod': '日产出',
+    'city.col_cash': '现金',
+
+    // Jobs
+    'job.UNEMPLOYED': '无业',
+    'job.FARMER': '农民',
+    'job.WORKER': '工人',
+    'job.EXECUTIVE': '高管',
+    'job.MAYOR': '市长',
+    'job.DEPUTY_MAYOR': '副市长',
+    'job.UNION_LEADER': '工会主席',
+    'job.FINANCIER': '金融家',
+
+    // Companies & Market
+    'market.stocks': '股票交易所',
+    'market.spot': '商品现货',
+    'comp.eps': '每股收益',
+    'comp.vol': '成交量',
+    'comp.my_company': '我的公司',
+    'comp.buy': '买入',
+    'comp.sell': '卖出',
+    'comp.short': '做空',
+    'comp.cover': '平仓',
+    'comp.add_short': '加仓做空',
+    'comp.create_title': '注册新公司 (IPO)',
+    'comp.name_label': '公司名称',
+    'comp.type_label': '主营业务',
+    'comp.ipo_cost': 'IPO 费用',
+    'comp.init_cash': '初始现金',
+    'comp.confirm': '确认上市',
+    'comp.cancel': '取消',
+    
+    // Commodity Modal
+    'lob.title': '订单簿交易 (LOB)',
+    'lob.price': '价格',
+    'lob.qty': '数量',
+    'lob.spread': '价差',
+    'lob.bids': '买盘 (Bids)',
+    'lob.asks': '卖盘 (Asks)',
+    'lob.no_bids': '无买盘',
+    'lob.no_asks': '无卖盘',
+    'lob.available': '可用资金',
+    'lob.owned': '持有库存',
+
+    // Validation
+    'val.title': 'AI 验证实验室',
+    'val.tab_calib': '理论验证',
+    'val.tab_shock': '政策冲击',
+    'val.tab_diag': 'AI 审计',
+    'val.phillips': '菲利普斯曲线',
+    'val.okun': '奥肯定律',
+    'val.smoothing': '消费平滑',
+    'val.qtm': '货币数量论',
+    'val.zipf': '企业规模分布',
+    'val.mpc': '边际消费倾向',
+    
+    // Common
+    'common.day': '第 {{day}} 天',
+    'common.loading': '思考中...',
+    'common.input_placeholder': '询问经济状况...'
   },
   en: {
+    // Settings & Header
     'settings.title': 'Settings',
     'settings.language': 'Language',
     'settings.notifications': 'Notifications',
@@ -26,10 +170,158 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
     'header.achievements': 'Trophies',
     'header.pause': 'Pause',
     'header.resume': 'Resume',
-    'toast.clear': 'Clear All'
+    'header.terminal': 'Terminal',
+    'toast.clear': 'Clear All',
+
+    // Nav
+    'nav.core': 'Core Systems',
+    'nav.market': 'Market Systems',
+    'nav.city': 'City Systems',
+    'nav.dashboard': 'Dashboard',
+    'nav.banking': 'Monetary Policy',
+    'nav.validation': 'AI Validation Lab',
+    'nav.commodities': 'Spot Market (LOB)',
+    'nav.companies': 'Stock Exchange',
+    'nav.cityhall': 'City Hall & Pop',
+    'nav.empire': 'My Empire',
+    'nav.nocompany': 'No Companies',
+
+    // Stats / Dashboard
+    'stats.health_score': 'Health Score',
+    'stats.money_supply': 'M2 Money Supply',
+    'stats.consumer_sentiment': 'Sentiment',
+    'stats.corp_cash': 'Corp Cash',
+    'stats.gdp_composition': 'GDP (C+I+G)',
+    'stats.money_dist': 'Wealth Dist.',
+    'stats.supply_chain': 'Supply Chain',
+    'stats.competition': 'Competition Matrix',
+    'stats.audit': 'Inventory Audit (Conservation)',
+    'stats.cycle': 'Business Cycle',
+    'cycle.EXPANSION': 'Expansion',
+    'cycle.PEAK': 'Peak',
+    'cycle.RECESSION': 'Recession',
+    'cycle.DEPRESSION': 'Depression',
+    'cycle.RECOVERY': 'Recovery',
+    'health.stability': 'Stability',
+    'health.productivity': 'Productivity',
+    'health.debt_risk': 'Debt Risk',
+    'health.liquidity': 'Liquidity',
+    'health.equality': 'Equality',
+
+    // Resources & Products
+    'res.GRAIN': 'Grain',
+    'res.BREAD': 'Bread',
+    'res.total': 'Total',
+    'res.produced': 'Produced',
+    'res.consumed': 'Consumed',
+    'res.spoiled': 'Spoiled',
+    'res.residents': 'Residents',
+    'res.companies': 'Companies',
+    'res.market': 'Market',
+
+    // Banking
+    'bank.title': 'Central Bank Console',
+    'bank.subtitle': 'Interest rates are auto-regulated via Taylor Rule.',
+    'bank.reserves': 'Reserves',
+    'bank.policy_goals': 'Policy Targets',
+    'bank.inflation_target': 'Inflation Target',
+    'bank.unemployment_target': 'Unemployment Target',
+    'bank.yield_curve': 'Yield Curve',
+    'bank.apply': 'Apply Policy',
+    'bank.loans': 'Active Loans',
+    'bank.deposits': 'Deposit Book',
+    'bank.system': 'Monetary System',
+    'bank.regime': 'Current Regime',
+    'bank.switch': 'Switch System',
+    'bank.gold': 'Gold Standard',
+    'bank.fiat': 'Fiat Money',
+
+    // City Hall
+    'city.mayor': 'Mayor',
+    'city.fiscal_status': 'Fiscal Status',
+    'city.income_stmt': 'Income Statement',
+    'city.revenue': 'Revenue',
+    'city.expense': 'Expense',
+    'city.net': 'Net Surplus',
+    'city.treasury': 'Treasury',
+    'city.absorption': 'Liquidity Abs.',
+    'city.tax_rates': 'Tax Rates',
+    'city.tax_income': 'Income Tax',
+    'city.tax_corp': 'Corp Tax',
+    'city.tax_consumption': 'Sales Tax',
+    'city.population': 'Population DB',
+    'city.search': 'Search residents...',
+    'city.col_name': 'Name (ID)',
+    'city.col_job': 'Job & Employer',
+    'city.col_prod': 'Daily Output',
+    'city.col_cash': 'Cash',
+
+    // Jobs
+    'job.UNEMPLOYED': 'Unemployed',
+    'job.FARMER': 'Farmer',
+    'job.WORKER': 'Worker',
+    'job.EXECUTIVE': 'Executive',
+    'job.MAYOR': 'Mayor',
+    'job.DEPUTY_MAYOR': 'Deputy Mayor',
+    'job.UNION_LEADER': 'Union Leader',
+    'job.FINANCIER': 'Financier',
+
+    // Companies & Market
+    'market.stocks': 'Stock Exchange',
+    'market.spot': 'Commodities',
+    'comp.eps': 'EPS',
+    'comp.vol': 'Vol',
+    'comp.my_company': 'MY COMPANY',
+    'comp.buy': 'Buy',
+    'comp.sell': 'Sell',
+    'comp.short': 'Short',
+    'comp.cover': 'Cover',
+    'comp.add_short': 'Add Short',
+    'comp.create_title': 'New Company (IPO)',
+    'comp.name_label': 'Company Name',
+    'comp.type_label': 'Industry',
+    'comp.ipo_cost': 'IPO Cost',
+    'comp.init_cash': 'Initial Cash',
+    'comp.confirm': 'Launch IPO',
+    'comp.cancel': 'Cancel',
+
+    // Commodity Modal
+    'lob.title': 'Order Book (LOB)',
+    'lob.price': 'Price',
+    'lob.qty': 'Qty',
+    'lob.spread': 'SPREAD',
+    'lob.bids': 'BIDS (Buy)',
+    'lob.asks': 'ASKS (Sell)',
+    'lob.no_bids': 'No Bids',
+    'lob.no_asks': 'No Asks',
+    'lob.available': 'Balance',
+    'lob.owned': 'Inventory',
+
+    // Validation
+    'val.title': 'AI Validation Lab',
+    'val.tab_calib': 'Calibration',
+    'val.tab_shock': 'Shock Lab',
+    'val.tab_diag': 'AI Diagnosis',
+    'val.phillips': 'Phillips Curve',
+    'val.okun': "Okun's Law",
+    'val.smoothing': 'Cons. Smoothing',
+    'val.qtm': 'Quant. Theory (QTM)',
+    'val.zipf': 'Firm Size (Zipf)',
+    'val.mpc': 'Wealth vs MPC',
+
+    // Common
+    'common.day': 'Day {{day}}',
+    'common.loading': 'Thinking...',
+    'common.input_placeholder': 'Ask about the economy...'
   }
 };
 
-export const getTranslation = (key: string, lang: 'zh' | 'en') => {
-    return TRANSLATIONS[lang]?.[key] || key;
+export const getTranslation = (key: string, lang: 'zh' | 'en', params?: Record<string, string | number>) => {
+    let text = TRANSLATIONS[lang]?.[key] || key;
+    if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+            text = text.replace(`{{${k}}}`,String(v));
+        });
+    }
+    return text;
 };

@@ -30,6 +30,22 @@ export type SkillLevel = 'NOVICE' | 'SKILLED' | 'EXPERT';
 
 export type MonetarySystemType = 'GOLD_STANDARD' | 'FIAT_MONEY';
 
+// --- NEW ENUMS ---
+export enum BusinessCyclePhase {
+  EXPANSION = 'EXPANSION',
+  PEAK = 'PEAK',
+  RECESSION = 'RECESSION',
+  RECOVERY = 'RECOVERY',
+  DEPRESSION = 'DEPRESSION'
+}
+
+export enum MayorPersonality {
+  KEYNESIAN = 'KEYNESIAN', // Stimulus focused, Counter-cyclical
+  AUSTRIAN = 'AUSTRIAN',   // Balanced budget, Laissez-faire
+  POPULIST = 'POPULIST'    // High spending, Low tax (Deficit bias)
+}
+// -----------------
+
 export interface Candle {
   day: number;
   open: number;
@@ -461,6 +477,17 @@ export interface PolicyOverrides {
   minWage: number; // Wage floor
 }
 
+// --- NEW INTERFACE FOR HEALTH SCORE ---
+export interface EconomicHealth {
+  score: number; // 0-100
+  stability: number;
+  productivity: number;
+  debtRisk: number;
+  liquidity: number;
+  equality: number;
+}
+// --------------------------------------
+
 export interface GameState {
   cash: number; 
   day: number;
@@ -488,8 +515,11 @@ export interface GameState {
   notifications: Notification[];
   settings: GameSettings;
   
-  // Lab
+  // Lab & Advanced Systems
   policyOverrides: PolicyOverrides;
+  businessCycle: BusinessCyclePhase; // NEW
+  mayorPersonality: MayorPersonality; // NEW
+  economicHealth: EconomicHealth; // NEW
 }
 
 export interface AgentAdvice {
@@ -509,11 +539,10 @@ export interface FlowStatsData {
 
 export type FlowStats = Record<IndustryType, FlowStatsData>;
 
-// New: Accumulator for GDP calculation within a tick
 export interface GDPFlowAccumulator {
-    C: number; // Consumption
-    I: number; // Investment (Capex + Inventory delta)
-    G: number; // Government Spending
+    C: number; 
+    I: number; 
+    G: number; 
 }
 
 export type TransactionParty = Resident | Company | CityTreasury | 'TREASURY' | 'MARKET' | 'GATHERERS';

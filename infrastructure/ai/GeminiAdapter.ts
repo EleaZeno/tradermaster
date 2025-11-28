@@ -56,25 +56,34 @@ export const getFinancialAdvisorResponseStream = async (
   try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const summary = getEconomicSummary(gameState, godModeData);
+      const lang = gameState.settings.language;
       
-      const prompt = `
+      const systemInstruction = `
       You are Alpha, the AI Chief Economist of Eden Valley.
+      You are a smart, slightly cynical, but highly professional economist.
+      
+      Your goal is to answer user questions about the economy using the provided JSON data.
+      
+      Guidelines:
+      1. If companies are losing money, check if wages are too high compared to profit.
+      2. If prices are high, check inventory shortage.
+      3. Keep answers concise (under 100 words).
+      4. Use Markdown for emphasis.
+      5. Respond in ${lang === 'zh' ? 'Chinese (Simplified)' : 'English'}.
+      `;
+
+      const prompt = `
       Current Economic State (JSON): ${JSON.stringify(summary)}
-
+      
       User Question: "${userMessage}"
-
-      Instructions:
-      1. Analyze the JSON data to answer the user. 
-      2. If companies are losing money, check if wages are too high compared to profit.
-      3. If prices are high, check the inventory shortage.
-      4. Keep your answer concise (under 100 words) and roleplay as a smart, slightly cynical economist.
-      5. Use Markdown for emphasis.
-      6. Respond in Chinese.
       `;
 
       const responseStream = await ai.models.generateContentStream({
         model: 'gemini-2.5-flash',
         contents: prompt,
+        config: {
+            systemInstruction: systemInstruction,
+        }
       });
 
       for await (const chunk of responseStream) {
@@ -86,7 +95,7 @@ export const getFinancialAdvisorResponseStream = async (
 
   } catch (error) {
       console.error("Gemini API Error:", error);
-      onChunk("系统离线：无法连接到 Gemini 神经网络。请确保 API KEY 配置正确。");
+      onChunk("System Offline: Unable to contact neural network.");
   }
 };
 
@@ -106,6 +115,7 @@ export const getFinancialAdvisorResponse = async (
 export const analyzeCompany = async (company: Company, gameState: GameState): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const lang = gameState.settings.language;
         
         const data = {
             name: company.name,
@@ -120,73 +130,72 @@ export const analyzeCompany = async (company: Company, gameState: GameState): Pr
             history: company.history.slice(-5) 
         };
 
-        const prompt = `
-        You are a ruthless Wall Street Analyst. Analyze this company:
-        ${JSON.stringify(data)}
-
-        Provide a "Buy", "Hold", or "Sell" rating and 3 bullet points explaining why.
-        Focus on:
-        1. Liquidity (Cash)
-        2. Efficiency (Profit vs Wage)
-        3. Valuation (Tobin's Q)
+        const systemInstruction = `
+        You are a ruthless Wall Street Analyst.
+        Your job is to provide a "Buy", "Hold", or "Sell" rating for a company based on its financial data.
         
-        Respond in Chinese. Use Markdown.
+        Output Format:
+        - Rating: [Buy/Hold/Sell]
+        - 3 Bullet points explaining why (Focus on Liquidity, Efficiency, Valuation).
+        - Respond in ${lang === 'zh' ? 'Chinese (Simplified)' : 'English'}. Use Markdown.
         `;
+
+        const prompt = `Analyze this company data: ${JSON.stringify(data)}`;
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
+            config: {
+                systemInstruction: systemInstruction
+            }
         });
 
-        return response.text || "数据不足，无法分析。";
+        return response.text || "Insufficient Data.";
     } catch (error) {
-        return "分析服务暂时不可用。";
+        return "Analysis service unavailable.";
     }
 }
 
 export const auditEconomy = async (snapshot: EconomicHealthSnapshot): Promise<string> => {
     try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        // Since we can't easily access state here without passing it, we assume Chinese default or English if prompted differently,
+        // but for now let's default to Chinese as per request unless we modify signature.
+        // To be safe, we'll ask for English output if the Snapshot structure hints or we just stick to Chinese as default for audit.
+        // Or better, let's just make it output based on the user's implicit locale.
+        // Actually, we can check a simple logic or default to Chinese as per the prompt request for "Full Hanization".
         
-        const prompt = `
+        const systemInstruction = `
         You are an Economic Simulation Auditor/Doctor.
         Your task is to diagnose the health, logic, and stability of a simulated economy.
         
+        Analyze for:
+        1. Logical Contradictions (e.g., Supply < Demand but Price Falling?)
+        2. Structural Imbalances (e.g., Money Supply exploding vs Flat GDP?)
+        3. Pathological Dynamics (Deflationary spiral, Liquidity trap)
+        
+        Style: Professional, Analytical, Constructive.
+        Respond in Chinese (Simplified).
+        `;
+
+        const prompt = `
         INPUT DATA (JSON):
         ${JSON.stringify(snapshot, null, 2)}
 
-        INSTRUCTIONS:
-        Analyze the data for:
-        1. **Logical Contradictions**: e.g., Supply < Demand but Price Falling? Unemployment High but Wages Rising?
-        2. **Structural Imbalances**: e.g., Money Supply exploding vs Flat GDP (Hyperinflation risk)? Zero Profit Margins?
-        3. **Pathological Dynamics**: e.g., Deflationary spiral, Liquidity trap (Velocity low), Inventory glut.
-        4. **Parameter Errors**: Are values behaving within realistic bounds for a simulation?
-
-        OUTPUT FORMAT (Markdown):
+        Provide a diagnosis report in Markdown:
         ## 🏥 经济诊断报告 (Day ${snapshot.timestamp})
-        
         ### 1. 核心体征
-        *Summarize GDP growth, Inflation, Unemployment in one sentence.*
-
         ### 2. 异常检测 (Critical Alerts)
-        *List bullet points of any detected anomalies. If none, say "System Nominal".*
-        - 🚨 [Severity: High/Med/Low] Issue Description -> Probable Cause.
-
-        ### 3. 结构性分析
-        *Brief analysis of:*
-        - **Market Efficiency**: Are prices clearing markets? (Check Spread & Inventory)
-        - **Labor Market**: Is the Wage-Productivity link healthy? (Wage Share: ${snapshot.labor.wage_share_gdp})
-        - **Financial Stability**: Debt levels and Money Velocity.
-
+        ### 3. 结构性分析 (Market Efficiency, Labor, Finance)
         ### 4. 修复/调优建议
-        *Suggest 1-2 concrete actions for the player (Policy) or developer (Parameter tweaks).*
-
-        Style: Professional, Analytical, Constructive. Use Chinese.
         `;
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
+            config: {
+                systemInstruction: systemInstruction
+            }
         });
 
         return response.text || "诊断服务无响应。";

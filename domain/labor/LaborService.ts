@@ -1,21 +1,28 @@
 
-import { GameState, Company, Resident, GameContext, SkillLevel, GDPFlowAccumulator } from '../../shared/types';
+import { GameState, Company, Resident, GameContext, GDPFlowAccumulator, ResourceType, ProductType } from '../../shared/types';
 import { TransactionService } from '../finance/TransactionService';
 import { GAME_CONFIG } from '../../shared/config';
 
 export class LaborService {
-  static process(gameState: GameState, context: GameContext, livingCostBenchmark: number, wagePressureMod: number, gdpFlow: GDPFlowAccumulator): void {
+  /**
+   * Phase 1: Update Wages & Skills based on Macro conditions
+   * Run before Consumption (Budgets depend on expected wages)
+   */
+  static updateMarketConditions(gameState: GameState): void {
+      // 1. Inflation Wage Adjustment (Sticky Wages)
+      LaborService.adjustReservationWages(gameState);
+
+      // 2. Process Skills (XP Gain)
+      LaborService.processSkills(gameState);
+  }
+
+  /**
+   * Phase 2: Hiring/Firing and Payroll
+   * Run during Production phase
+   */
+  static processPayrollAndHiring(gameState: GameState, context: GameContext, livingCostBenchmark: number, wagePressureMod: number, gdpFlow: GDPFlowAccumulator): void {
     const { companies } = gameState;
     const residents = gameState.population.residents;
-
-    // 0. Inflation Wage Adjustment (Wage-Price Spiral)
-    LaborService.adjustReservationWages(gameState);
-
-    // 1. Process Skills (XP Gain)
-    LaborService.processSkills(gameState);
-
-    LaborService.processSocialMobility(gameState);
-
     const employeesByCompany = context.employeesByCompany;
 
     companies.forEach(company => {
@@ -23,14 +30,19 @@ export class LaborService {
       
       const companyEmployees = employeesByCompany[company.id] || [];
 
+      // Update Company Wage Policy
       LaborService.processUnionPolitics(company, companyEmployees, gameState);
-      LaborService.updateWageOffer(company, livingCostBenchmark, gameState);
-
+      
+      // Calculate Equilibrium Wage based on Marginal Productivity
       if (!company.isPlayerFounded) {
-        LaborService.adjustAIStrategy(company, companyEmployees, wagePressureMod);
+        LaborService.adjustAIStrategy(company, companyEmployees, gameState);
+      } else {
+        // For player, we just apply the manual slider/multiplier relative to benchmark
+        LaborService.updatePlayerWage(company, livingCostBenchmark, gameState);
       }
 
-      LaborService.payExecutives(company, companyEmployees, gameState, context);
+      // Execute Payroll
+      LaborService.payExecutives(company, companyEmployees, gameState, context, gdpFlow);
       LaborService.manageHeadcount(company, companyEmployees, residents, gameState, context);
     });
   }
@@ -40,7 +52,6 @@ export class LaborService {
           if (r.job !== 'UNEMPLOYED' && r.employerId) {
               r.xp += GAME_CONFIG.LABOR.XP_PER_DAY;
               
-              // Level Up Logic
               if (r.skill === 'NOVICE' && r.xp >= GAME_CONFIG.LABOR.SKILL_THRESHOLDS.SKILLED) {
                   r.skill = 'SKILLED';
                   state.logs.unshift(`🎓 ${r.name} 晋升为熟练工 (Skilled)`);
@@ -60,9 +71,10 @@ export class LaborService {
       const sensitivity = GAME_CONFIG.ECONOMY.WAGE_SENSITIVITY;
       
       gameState.population.residents.forEach(res => {
+          // Workers adjust reservation wage based on inflation expectations
           const change = res.reservationWage * lastInflation * sensitivity;
           if (change > 0) res.reservationWage += change; 
-          else res.reservationWage += change * 0.1; 
+          else res.reservationWage += change * 0.1; // Downward stickiness
           
           let skillMultiplier = 1.0;
           if (res.skill === 'SKILLED') skillMultiplier = 1.5;
@@ -109,39 +121,10 @@ export class LaborService {
       }
   }
 
-  private static processSocialMobility(gameState: GameState): void {
-    const WEALTH_THRESHOLD = 350; 
-    const POVERTY_LINE = 20; 
-
-    gameState.population.residents.forEach(resident => {
-        if (resident.isPlayer || resident.job === 'MAYOR' || resident.job === 'DEPUTY_MAYOR' || resident.job === 'EXECUTIVE' || resident.job === 'UNION_LEADER') return;
-
-        if (resident.cash > WEALTH_THRESHOLD && (resident.job === 'FARMER' || resident.job === 'WORKER')) {
-            if (resident.job === 'WORKER' && resident.employerId) {
-                 const company = gameState.companies.find(c => c.id === resident.employerId);
-                 if (company) company.employees--;
-            }
-            
-            resident.job = 'FINANCIER';
-            resident.employerId = undefined;
-            resident.livingStandard = 'LUXURY'; 
-            gameState.logs.unshift(`👔 ${resident.name} 积累了巨额财富，决定退休成为全职投资人。`);
-        }
-
-        if (resident.cash < POVERTY_LINE && resident.job === 'FINANCIER') {
-            resident.job = 'FARMER';
-            resident.livingStandard = 'SURVIVAL'; 
-            gameState.logs.unshift(`🚜 ${resident.name} 投资破产，被迫重新下地务农。`);
-        }
-    });
-    
-    gameState.population.financiers = gameState.population.residents.filter(r => r.job === 'FINANCIER').length;
-    gameState.population.farmers = gameState.population.residents.filter(r => r.job === 'FARMER').length;
-  }
-
-  private static updateWageOffer(company: Company, benchmark: number, gameState: GameState): void {
+  private static updatePlayerWage(company: Company, benchmark: number, gameState: GameState): void {
     let targetMultiplier = company.wageMultiplier || 1.5;
     
+    // Union pressure overrides player setting if too low
     if (company.unionTension > 50) {
         targetMultiplier = Math.max(targetMultiplier, 2.2); 
     }
@@ -161,31 +144,75 @@ export class LaborService {
     company.wageOffer = offer;
   }
 
-  private static adjustAIStrategy(company: Company, employees: Resident[], wagePressure: number): void {
+  // --- MARGINAL PRODUCTIVITY LOGIC ---
+  private static adjustAIStrategy(company: Company, employees: Resident[], state: GameState): void {
+    // 1. Calculate Physical Marginal Product of Labor (MPL)
+    // Production Function: Y = A * K^0.3 * L^0.7
+    // MPL = dY/dL = 0.7 * (Y / L)
+    
+    const line = company.productionLines[0]; // Assuming single product type for primary decision
+    if (!line) return;
+
+    const A = line.efficiency;
+    const K = Math.max(1, company.landTokens || 1);
     const workersCount = employees.filter(r => r.job === 'WORKER').length;
-    const nonWorkersCount = employees.filter(r => r.job !== 'WORKER').length;
+    const L = Math.max(1, workersCount);
     
-    const stock = Object.values(company.inventory.finished).reduce((a, b) => a + (Number(b) || 0), 0);
+    const currentOutput = 2.5 * A * Math.pow(K, 0.3) * Math.pow(L, 0.7);
+    const MPL = 0.7 * (currentOutput / L);
     
-    if (stock > 50 && company.employees > 1) {
-        company.targetEmployees = Math.max(1, company.targetEmployees - 1);
-    } else if (stock < 15 && company.cash > 200) {
+    // 2. Calculate Value of Marginal Product (VMPL)
+    // VMPL = MPL * Price of Output
+    // This represents the revenue generated by the last worker
+    let outputPrice = 1.0;
+    if (line.type === ResourceType.GRAIN) outputPrice = state.resources[ResourceType.GRAIN].currentPrice;
+    if (line.type === ProductType.BREAD) outputPrice = state.products[ProductType.BREAD].marketPrice;
+    
+    const VMPL = MPL * outputPrice;
+    
+    // 3. Profit Maximization Condition
+    // Standard Econ: Hire until Wage = VMPL
+    // Decision Rule:
+    // If VMPL > Wage: Hiring generates profit -> Increase Labor Demand
+    // If VMPL < Wage: Last worker loses money -> Decrease Labor Demand
+    
+    const currentWage = company.wageOffer;
+    
+    // Hiring Target Logic
+    if (VMPL > currentWage * 1.1) {
+        // Profitable to expand
         company.targetEmployees++;
+    } else if (VMPL < currentWage * 0.9) {
+        // Losing money at margin
+        company.targetEmployees = Math.max(1, company.targetEmployees - 1);
+    }
+    
+    // Wage Setting Logic (The Auction)
+    // AI firms update their wage offer towards VMPL to attract/retain workers without overpaying
+    // w_{t+1} = w_t + \lambda (VMPL - w_t)
+    // However, if we can't fill positions, we must bid higher. If we have surplus applicants, we bid lower.
+    // Simplifying: Target wage tracks VMPL with a safety margin (profit margin)
+    
+    const targetWage = VMPL * 0.9; // Target 10% profit on marginal labor
+    const adjustmentSpeed = 0.1;
+    const newWageOffer = currentWage + adjustmentSpeed * (targetWage - currentWage);
+    
+    company.wageOffer = parseFloat(Math.max(0.5, newWageOffer).toFixed(2));
+    
+    // Check Inventory Constraints (Cashflow protection)
+    const stock = Object.values(company.inventory.finished).reduce((a, b) => a + (Number(b) || 0), 0);
+    if (stock > 50) {
+        // Inventory glut override: Stop hiring, cut costs
+        company.targetEmployees = Math.max(1, company.targetEmployees - 1);
+        company.wageOffer = Math.max(0.5, company.wageOffer * 0.95);
     }
 
-    const target = Math.max(0, company.targetEmployees - nonWorkersCount);
-    const gap = target - workersCount;
-
-    if (gap > 0 || wagePressure > 1.05 || company.unionTension > 60) {
-      company.wageMultiplier = Math.min(5.0, company.wageMultiplier + 0.15);
-    } else if (gap < 0 || (gap === 0 && company.cash < company.wageOffer * 5)) {
-      if (company.unionTension < 30) {
-          company.wageMultiplier = Math.max(1.2, company.wageMultiplier - 0.05);
-      }
-    }
+    // Update the multiplier for UI display (Benchmark relative)
+    const benchmark = state.resources[ResourceType.GRAIN].currentPrice || 1.0;
+    company.wageMultiplier = parseFloat((company.wageOffer / benchmark).toFixed(1));
   }
 
-  private static payExecutives(company: Company, employees: Resident[], gameState: GameState, context: GameContext): void {
+  private static payExecutives(company: Company, employees: Resident[], gameState: GameState, context: GameContext, gdpFlow: GDPFlowAccumulator): void {
     const executives = employees.filter(r => r.job === 'EXECUTIVE' || r.job === 'UNION_LEADER');
     
     executives.forEach(exec => {
@@ -199,6 +226,7 @@ export class LaborService {
       if (company.cash >= salary) {
         TransactionService.transfer(company, exec, salary, { treasury: gameState.cityTreasury, residents: gameState.population.residents, context });
         company.accumulatedCosts += salary;
+        // Executive pay is essentially Labor Income (part of GDP usually, but functionally profit sharing here)
       }
     });
   }
@@ -210,6 +238,7 @@ export class LaborService {
     const gap = target - workers.length;
 
     if (gap > 0 && company.cash > company.wageOffer * 3) { 
+      // Supply Side: Check Reservation Wage
       const candidate = allResidents.find(r => 
           r.job === 'FARMER' && 
           r.reservationWage <= company.wageOffer && 
@@ -223,6 +252,7 @@ export class LaborService {
         
         if (context.employeesByCompany[company.id]) context.employeesByCompany[company.id].push(candidate);
         
+        // Signing Bonus
         TransactionService.transfer(company, candidate, company.wageOffer * 0.5, { treasury: gameState.cityTreasury, residents: allResidents, context });
       }
     } 
@@ -236,6 +266,7 @@ export class LaborService {
         const idx = context.employeesByCompany[company.id]?.indexOf(workerToFire);
         if (idx > -1) context.employeesByCompany[company.id].splice(idx, 1);
         
+        // Severance
         TransactionService.transfer(company, workerToFire, company.wageOffer * 2, { treasury: gameState.cityTreasury, residents: allResidents, context });
       }
     }
