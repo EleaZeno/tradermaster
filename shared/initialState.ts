@@ -16,6 +16,7 @@ const generateResidents = (count: number): Resident[] => {
     id: 'res_player', name: names[0], age: 25, isPlayer: true,
     wealth: GAME_CONFIG.INITIAL_PLAYER_CASH, cash: GAME_CONFIG.INITIAL_PLAYER_CASH,
     job: 'UNEMPLOYED', employerId: undefined, salary: 0,
+    skill: 'SKILLED', xp: 150,
     influence: 50, intelligence: 90, leadership: 50, politicalStance: 'CENTRIST',
     happiness: 100, inventory: { [ResourceType.GRAIN]: 10 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'BASIC', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
@@ -27,6 +28,7 @@ const generateResidents = (count: number): Resident[] => {
     id: 'res_mayor', name: names[1], age: 55, isPlayer: false,
     wealth: 60, cash: 100, 
     job: 'MAYOR', salary: 2.0, 
+    skill: 'EXPERT', xp: 500,
     influence: 100, intelligence: 80, leadership: 90, politicalStance: 'CENTRIST',
     happiness: 100, inventory: { [ProductType.BREAD]: 5 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'LUXURY', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 },
@@ -38,6 +40,7 @@ const generateResidents = (count: number): Resident[] => {
     id: 'res_deputy', name: names[2], age: 40, isPlayer: false,
     wealth: 45, cash: 80,
     job: 'DEPUTY_MAYOR', salary: 1.2, 
+    skill: 'SKILLED', xp: 200,
     influence: 70, intelligence: 75, leadership: 60, politicalStance: 'CENTRIST',
     happiness: 90, inventory: { [ProductType.BREAD]: 3 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'COMFORT', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 },
@@ -49,6 +52,7 @@ const generateResidents = (count: number): Resident[] => {
     id: 'res_ceo_grain', name: names[3], age: 50, isPlayer: false,
     wealth: 50, cash: 80,
     job: 'EXECUTIVE', employerId: 'comp_grain', salary: 2.5,
+    skill: 'EXPERT', xp: 400,
     influence: 80, intelligence: 85, leadership: 80, politicalStance: 'CAPITALIST',
     happiness: 90, inventory: {}, portfolio: {}, futuresPositions: [],
     livingStandard: 'COMFORT', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
@@ -60,6 +64,7 @@ const generateResidents = (count: number): Resident[] => {
     id: 'res_union_grain', name: names[4], age: 45, isPlayer: false,
     wealth: 30, cash: 60,
     job: 'WORKER', employerId: 'comp_grain', salary: 0, 
+    skill: 'SKILLED', xp: 250,
     influence: 90, intelligence: 60, leadership: 90, politicalStance: 'SOCIALIST',
     happiness: 95, inventory: {}, portfolio: {}, futuresPositions: [],
     livingStandard: 'BASIC', timePreference: 0.4, needs: { [ResourceType.GRAIN]: 100 },
@@ -71,6 +76,7 @@ const generateResidents = (count: number): Resident[] => {
     id: 'res_ceo_food', name: names[5], age: 48, isPlayer: false,
     wealth: 50, cash: 80,
     job: 'EXECUTIVE', employerId: 'comp_food', salary: 2.5,
+    skill: 'EXPERT', xp: 350,
     influence: 80, intelligence: 85, leadership: 80, politicalStance: 'CAPITALIST',
     happiness: 90, inventory: {}, portfolio: {}, futuresPositions: [],
     livingStandard: 'COMFORT', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
@@ -82,6 +88,7 @@ const generateResidents = (count: number): Resident[] => {
     id: 'res_union_food', name: names[6], age: 42, isPlayer: false,
     wealth: 30, cash: 60,
     job: 'WORKER', employerId: 'comp_food', salary: 0,
+    skill: 'SKILLED', xp: 180,
     influence: 90, intelligence: 60, leadership: 90, politicalStance: 'SOCIALIST',
     happiness: 95, inventory: {}, portfolio: {}, futuresPositions: [],
     livingStandard: 'BASIC', timePreference: 0.4, needs: { [ResourceType.GRAIN]: 100 },
@@ -111,6 +118,7 @@ const generateResidents = (count: number): Resident[] => {
       wealth: 30, cash: 50, 
       job: job, employerId: employerId,
       salary: 0, 
+      skill: 'NOVICE', xp: Math.floor(Math.random() * 50),
       influence: 5, intelligence: intelligence, leadership: 5 + Math.floor(Math.random() * 50),
       politicalStance: 'CENTRIST',
       happiness: 70, inventory: { [ResourceType.GRAIN]: 5 }, portfolio: {}, futuresPositions: [],
@@ -178,6 +186,8 @@ export const INITIAL_POPULATION: PopulationState = {
   financiers: 0,
   averageWage: 2.0, 
   averageHappiness: 75,
+  consumerSentiment: 50,
+  demographics: { births: 0, deaths: 0, immigration: 0 },
   wealthLevel: { low: 0, mid: 0, high: 0 },
 };
 
@@ -208,6 +218,7 @@ export const INITIAL_BANK: Bank = {
   totalLoans: 0,
   depositRate: 0.001, // 0.1% daily
   loanRate: 0.003,    // 0.3% daily
+  yieldCurve: { rate1d: 0.001, rate30d: 0.003, rate365d: 0.005 },
   targetInflation: 0.02, 
   targetUnemployment: 0.05,
   loans: [],
@@ -272,7 +283,10 @@ export const INITIAL_COMPANIES: Company[] = [
     inventory: { raw: {}, finished: { [ResourceType.GRAIN]: 80 } }, 
     landTokens: 10, 
     avgCost: 0.5,
+    lastFixedCost: 0,
     tobinQ: 1.0,
+    age: 120, stage: 'MATURITY',
+    kpis: { roe: 0.1, roa: 0.08, roi: 0.12, leverage: 0.2, marketShare: 0.6 },
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.05, 20),
     type: CompanyType.COOPERATIVE, wageStructure: WageStructure.FLAT, ceoId: 'res_ceo_grain', isBankrupt: false
@@ -297,7 +311,10 @@ export const INITIAL_COMPANIES: Company[] = [
     inventory: { raw: { [ResourceType.GRAIN]: 100 }, finished: { [ProductType.BREAD]: 20 } }, 
     landTokens: 0, 
     avgCost: 1.2,
+    lastFixedCost: 0,
     tobinQ: 1.0,
+    age: 60, stage: 'GROWTH',
+    kpis: { roe: 0.15, roa: 0.1, roi: 0.2, leverage: 0.5, marketShare: 0.4 },
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.1, 20),
     type: CompanyType.CORPORATION, wageStructure: WageStructure.HIERARCHICAL, ceoId: 'res_ceo_food', isBankrupt: false
@@ -321,6 +338,7 @@ INITIAL_COMPANIES.forEach(c => {
 export const INITIAL_STATE: GameState = {
     cash: GAME_CONFIG.INITIAL_PLAYER_CASH,
     day: 1,
+    totalTicks: 0,
     mayorId: 'res_mayor',
     cityTreasury: INITIAL_CITY_TREASURY,
     bank: INITIAL_BANK,
@@ -334,7 +352,7 @@ export const INITIAL_STATE: GameState = {
     events: [],
     netWorthHistory: [{ day: 1, value: GAME_CONFIG.INITIAL_PLAYER_CASH }],
     macroHistory: [],
-    chatHistory: [{ role: 'model', text: '微型社会模拟 v6.0 (Chaos Mode) 已启动。\n系统已接入 Limit Order Book, Cobb-Douglas 生产函数与 Taylor Rule 央行系统。', timestamp: Date.now() }],
+    chatHistory: [{ role: 'model', text: '微型社会模拟 v7.0 已启动。\n系统已接入人口动态、Yield Curve 与 公司生命周期模型。', timestamp: Date.now() }],
     logs: ["🏗️ 系统初始化完成"],
     economicOverview: {
         totalResidentCash: 0, totalCorporateCash: 0, totalFundCash: 0, totalCityCash: 0, totalSystemGold: 0,
@@ -349,9 +367,9 @@ export const INITIAL_STATE: GameState = {
     settings: {
         language: 'zh',
         notifications: {
-            trades: true,
-            achievements: true,
-            news: true
+            trades: false,
+            achievements: false,
+            news: false
         }
     }
 };

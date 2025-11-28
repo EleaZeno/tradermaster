@@ -1,4 +1,5 @@
 
+
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ProductionSystem } from '../../../domain/systems/ProductionSystem';
 import { GameState, ResourceType, ProductType, FlowStats, OrderBook, GameContext } from '../../../shared/types';
@@ -10,11 +11,12 @@ const createEmptyBook = (price: number): OrderBook => ({
 });
 
 const createMockState = (): GameState => ({
-    day: 1, cash: 100, mayorId: 'res_mayor',
+    day: 1, totalTicks: 0, cash: 100, mayorId: 'res_mayor',
     cityTreasury: JSON.parse(JSON.stringify(INITIAL_CITY_TREASURY)),
     bank: { 
         reserves: 1000, totalDeposits: 0, totalLoans: 0, depositRate: 0.001, loanRate: 0.003, 
         targetInflation: 0.02, targetUnemployment: 0.05,
+        yieldCurve: { rate1d: 0.001, rate30d: 0.003, rate365d: 0.005 },
         loans: [], deposits: [], history: [] 
     },
     election: { active: false, cycle: 1, nextDate: 10, candidates: [], winnerId: null },

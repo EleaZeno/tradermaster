@@ -1,40 +1,40 @@
 
 import React, { useMemo } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-import { GameState, IndustryStat, ResourceType, ProductType, EconomicSnapshot } from '../../shared/types';
+import { ResourceType, ProductType, EconomicSnapshot } from '../../shared/types';
 import { Card } from '../../shared/components';
 import { RESOURCE_ICONS } from '../../shared/assets';
+import { useGameStore } from '../../shared/store/useGameStore';
+import { SupplyChainViz } from './SupplyChainViz';
+import { CompetitionMatrix } from './CompetitionMatrix';
 import { 
-  ArrowUp, ArrowDown, Coins, Wallet, Landmark, Factory, 
-  Scale, AlertCircle, ShoppingCart, Package, Users, PieChart as PieChartIcon
+  ArrowUp, ArrowDown, Coins, Factory, Scale, AlertCircle, ShoppingCart, Package, Users, PieChart as PieChartIcon, Landmark, Smile, Baby, UserMinus
 } from 'lucide-react';
-
-interface StatsTabProps {
-  gameState: GameState;
-  industryStats: IndustryStat[];
-}
 
 const NAME_MAP: Record<string, string> = {
   [ResourceType.GRAIN]: "粮食",
   [ProductType.BREAD]: "面包"
 };
 
-export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
-  const { economicOverview, population, companies, cityTreasury, resources, products } = gameState;
+export const StatsTab: React.FC = () => {
+  const economicOverview = useGameStore(s => s.gameState.economicOverview);
+  const population = useGameStore(s => s.gameState.population);
+  const companies = useGameStore(s => s.gameState.companies);
+  const cityTreasury = useGameStore(s => s.gameState.cityTreasury);
+  const resources = useGameStore(s => s.gameState.resources);
+  const products = useGameStore(s => s.gameState.products);
   
-  // Real-time calculation to prevent initial state desync
   const totalResidentCash = population.residents.reduce((sum, r) => sum + r.cash, 0);
   const totalCorporateCash = companies.reduce((sum, c) => sum + c.cash, 0);
   const totalCityCash = cityTreasury.cash;
   const totalSystemGold = totalResidentCash + totalCorporateCash + totalCityCash;
 
   const moneySupplyData = [
-      { name: '居民持有', value: totalResidentCash, color: '#3b82f6' }, // Blue
-      { name: '企业持有', value: totalCorporateCash, color: '#10b981' }, // Emerald
-      { name: '国库持有', value: totalCityCash, color: '#f59e0b' }     // Amber
+      { name: '居民持有', value: totalResidentCash, color: '#3b82f6' }, 
+      { name: '企业持有', value: totalCorporateCash, color: '#10b981' }, 
+      { name: '国库持有', value: totalCityCash, color: '#f59e0b' }
   ].filter(d => d.value > 0);
 
-  // Class Structure Calculation
   const classData = useMemo(() => {
       const sorted = [...population.residents].sort((a, b) => a.cash - b.cash);
       const poor = sorted.filter(r => r.cash < 50).length;
@@ -42,13 +42,14 @@ export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
       const rich = sorted.filter(r => r.cash >= 300).length;
 
       return [
-          { name: '底层 (<50oz)', value: poor, color: '#94a3b8' },   // Slate
-          { name: '中产 (50-300oz)', value: middle, color: '#60a5fa' }, // Blue
-          { name: '富裕 (>300oz)', value: rich, color: '#f43f5e' }    // Rose
+          { name: '底层 (<50oz)', value: poor, color: '#94a3b8' },   
+          { name: '中产 (50-300oz)', value: middle, color: '#60a5fa' }, 
+          { name: '富裕 (>300oz)', value: rich, color: '#f43f5e' }    
       ].filter(d => d.value > 0);
   }, [population.residents]);
 
   const cpi = (resources[ResourceType.GRAIN].currentPrice + products[ProductType.BREAD].marketPrice).toFixed(2);
+  const sentiment = population.consumerSentiment || 50;
 
   return (
     <div className="space-y-6 animate-in fade-in">
@@ -71,12 +72,12 @@ export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
              <div className="text-2xl font-mono text-purple-400 font-bold ml-1">{cpi}</div>
           </Card>
 
-          <Card className="bg-stone-900 border-stone-800 border-l-4 border-l-orange-500">
+          <Card className="bg-stone-900 border-stone-800 border-l-4 border-l-pink-500">
              <div className="flex items-center gap-3 mb-2">
-                 <div className="p-2 bg-orange-950/50 rounded-lg text-orange-400"><Wallet size={18}/></div>
-                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">平均工资</div>
+                 <div className="p-2 bg-pink-950/50 rounded-lg text-pink-400"><Smile size={18}/></div>
+                 <div className="text-xs text-stone-500 font-bold uppercase tracking-wider">消费者信心</div>
              </div>
-             <div className="text-2xl font-mono text-orange-400 font-bold ml-1">{gameState.population.averageWage.toFixed(2)} <span className="text-sm text-stone-600">oz</span></div>
+             <div className="text-2xl font-mono text-pink-400 font-bold ml-1">{sentiment} <span className="text-sm text-stone-600">/ 100</span></div>
           </Card>
 
           <Card className="bg-stone-900 border-stone-800 border-l-4 border-l-emerald-500">
@@ -88,8 +89,15 @@ export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
           </Card>
       </div>
 
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Card title="产业链全景图 (Supply Chain)" className="bg-stone-900 border-stone-800">
+              <SupplyChainViz />
+          </Card>
+          <CompetitionMatrix />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="货币供应分布 (Money Supply)" className="bg-stone-900 border-stone-800 h-96">
+          <Card title="货币供应分布 (Money Supply)" className="bg-stone-900 border-stone-800 h-80">
              <div className="w-full h-full relative">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -100,13 +108,10 @@ export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
                     <Legend verticalAlign="bottom" iconType="circle"/>
                     </PieChart>
                 </ResponsiveContainer>
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <PieChartIcon size={24} className="text-stone-700 opacity-20" />
-                </div>
             </div>
           </Card>
 
-          <Card title="社会阶层结构 (Class Structure)" className="bg-stone-900 border-stone-800 h-96">
+          <Card title="社会阶层结构 (Class Structure)" className="bg-stone-900 border-stone-800 h-80">
              <div className="w-full h-full relative">
                 <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -117,9 +122,6 @@ export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
                     <Legend verticalAlign="bottom" iconType="circle"/>
                     </PieChart>
                 </ResponsiveContainer>
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <Users size={24} className="text-stone-700 opacity-20" />
-                </div>
              </div>
           </Card>
       </div>
@@ -168,9 +170,6 @@ export const StatsTab: React.FC<StatsTabProps> = ({ gameState }) => {
                              <td className="px-3 py-3 text-right font-mono text-amber-300">{Math.floor(data.market)}</td>
                          </tr>
                      )})}
-                     {Object.keys(economicOverview.inventoryAudit).length === 0 && (
-                         <tr><td colSpan={8} className="text-center py-8 text-stone-600 italic">等待首个经济周期结算...</td></tr>
-                     )}
                  </tbody>
              </table>
           </div>

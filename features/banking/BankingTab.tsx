@@ -1,26 +1,44 @@
 
-import React, { useState } from 'react';
-import { Bank } from '../../shared/types';
+
+import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../../shared/store/useGameStore';
 import { Card, Button } from '../../shared/components';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Line, ComposedChart } from 'recharts';
-import { Building2, TrendingUp, DollarSign, Settings2 } from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, Line, ComposedChart, BarChart, Bar, Cell } from 'recharts';
+import { Building2, DollarSign, Activity, TrendingUp } from 'lucide-react';
 
-interface BankingTabProps {
-  bank: Bank;
-}
+export const BankingTab: React.FC = () => {
+  const bank = useGameStore(s => s.gameState.bank);
+  const updateBank = useGameStore(s => s.updateBank);
 
-export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
   const [targetInflation, setTargetInflation] = useState(bank.targetInflation);
   const [targetUnemployment, setTargetUnemployment] = useState(bank.targetUnemployment);
-  const updateBank = useGameStore(s => s.updateBank);
+
+  useEffect(() => {
+     setTargetInflation(bank.targetInflation);
+     setTargetUnemployment(bank.targetUnemployment);
+  }, [bank.targetInflation, bank.targetUnemployment]);
 
   const handleApply = () => {
       updateBank({ targetInflation, targetUnemployment });
   };
 
+  const yieldCurveData = [
+      { name: '1D', rate: bank.yieldCurve.rate1d * 100 },
+      { name: '30D', rate: bank.yieldCurve.rate30d * 100 },
+      { name: '1Y', rate: bank.yieldCurve.rate365d * 100 },
+  ];
+
   return (
     <div className="space-y-6 animate-in fade-in">
+        <div className="bg-gradient-to-r from-stone-900 to-emerald-950 p-4 rounded-xl border border-emerald-900/50">
+            <h2 className="text-xl font-bold text-emerald-400 flex items-center gap-2 mb-2">
+                <Building2 /> 中央银行控制台
+            </h2>
+            <p className="text-sm text-stone-400">
+                央行根据泰勒规则 (Taylor Rule) 自动调节利率。请设定政策目标以引导经济。
+            </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card className="bg-stone-900 border-stone-800" title="央行储备">
                 <div className="flex items-center gap-4">
@@ -34,40 +52,51 @@ export const BankingTab: React.FC<BankingTabProps> = ({ bank }) => {
                 </div>
             </Card>
 
-            <Card className="bg-stone-900 border-stone-800" title="货币政策驾驶舱 (泰勒规则)">
-                 <div className="space-y-2">
-                     <div className="flex justify-between items-center text-xs">
-                         <label className="text-stone-400">目标通胀率 (年化)</label>
-                         <input 
-                            type="number" step="0.01" 
-                            className="w-16 bg-stone-950 border border-stone-700 rounded px-1 text-right text-white"
-                            value={targetInflation}
-                            onChange={(e) => setTargetInflation(parseFloat(e.target.value))}
-                         />
+            <Card className="bg-stone-900 border-stone-800" title="货币政策目标">
+                 <div className="space-y-4">
+                     <div className="flex justify-between items-center text-sm">
+                         <label className="text-stone-400">通胀目标 ($\pi^*$)</label>
+                         <div className="flex items-center gap-1">
+                            <input 
+                                type="number" step="0.01" 
+                                className="w-16 bg-stone-950 border border-stone-700 rounded px-1 text-right text-white focus:border-emerald-500 outline-none"
+                                value={targetInflation}
+                                onChange={(e) => setTargetInflation(parseFloat(e.target.value))}
+                            />
+                            <span className="text-stone-500 text-xs">%</span>
+                         </div>
                      </div>
-                     <div className="flex justify-between items-center text-xs">
-                         <label className="text-stone-400">目标失业率</label>
-                         <input 
-                            type="number" step="0.01" 
-                            className="w-16 bg-stone-950 border border-stone-700 rounded px-1 text-right text-white"
-                            value={targetUnemployment}
-                            onChange={(e) => setTargetUnemployment(parseFloat(e.target.value))}
-                         />
+                     <div className="flex justify-between items-center text-sm">
+                         <label className="text-stone-400">失业率目标 ($u^*$)</label>
+                         <div className="flex items-center gap-1">
+                            <input 
+                                type="number" step="0.01" 
+                                className="w-16 bg-stone-950 border border-stone-700 rounded px-1 text-right text-white focus:border-emerald-500 outline-none"
+                                value={targetUnemployment}
+                                onChange={(e) => setTargetUnemployment(parseFloat(e.target.value))}
+                            />
+                            <span className="text-stone-500 text-xs">%</span>
+                         </div>
                      </div>
-                     <Button size="sm" className="w-full mt-1" onClick={handleApply}>更新政策目标</Button>
+                     <Button size="sm" variant="primary" className="w-full mt-2" onClick={handleApply}>应用政策</Button>
                  </div>
             </Card>
 
-            <Card className="bg-stone-900 border-stone-800" title="系统杠杆">
-                <div className="flex items-center gap-4">
-                    <div className="p-3 bg-amber-900/30 rounded-full border border-amber-700">
-                        <DollarSign size={24} className="text-amber-500" />
-                    </div>
-                    <div>
-                        <div className="text-sm text-stone-500">未偿信贷总额</div>
-                        <div className="text-2xl font-bold font-mono text-amber-400">{Math.floor(bank.totalLoans).toLocaleString()} oz</div>
-                    </div>
+            <Card className="bg-stone-900 border-stone-800" title="收益率曲线 (Yield Curve)">
+                <div className="h-32 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={yieldCurveData}>
+                            <XAxis dataKey="name" stroke="#666" tick={{fontSize: 10}} />
+                            <Tooltip contentStyle={{backgroundColor: '#1c1917', border: '1px solid #444', fontSize: '10px'}} />
+                            <Bar dataKey="rate" name="Rate %" radius={[4, 4, 0, 0]}>
+                                {yieldCurveData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={index === 2 ? '#f59e0b' : '#10b981'} />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
+                <div className="text-xs text-center text-stone-500 mt-1">1D: {(bank.yieldCurve.rate1d*100).toFixed(2)}% | 1Y: {(bank.yieldCurve.rate365d*100).toFixed(2)}%</div>
             </Card>
         </div>
 

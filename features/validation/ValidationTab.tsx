@@ -1,18 +1,15 @@
 
-
 import React, { useMemo } from 'react';
-import { GameState } from '../../shared/types';
 import { CalibrationService } from './CalibrationService';
-import { Card, Button } from '../../shared/components';
-import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, Tooltip, BarChart, Bar, Cell, CartesianGrid, Legend } from 'recharts';
-import { CheckCircle2, XCircle, Beaker, Scale, Activity, TrendingDown, Coins } from 'lucide-react';
+import { Card } from '../../shared/components';
+import { ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, Tooltip, BarChart, Bar, CartesianGrid } from 'recharts';
+import { CheckCircle2, XCircle, Beaker } from 'lucide-react';
+import { useGameStore } from '../../shared/store/useGameStore';
 
-interface ValidationTabProps {
-  gameState: GameState;
-}
-
-export const ValidationTab: React.FC<ValidationTabProps> = ({ gameState }) => {
-  const { macroHistory } = gameState;
+export const ValidationTab: React.FC = () => {
+  const macroHistory = useGameStore(s => s.gameState.macroHistory);
+  // We need full state for some checks
+  const gameState = useGameStore(s => s.gameState);
 
   const phillips = useMemo(() => CalibrationService.checkPhillipsCurve(macroHistory), [macroHistory]);
   const smoothing = useMemo(() => CalibrationService.checkConsumptionSmoothing(macroHistory), [macroHistory]);

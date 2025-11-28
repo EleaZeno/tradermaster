@@ -1,45 +1,52 @@
 
+
 import React, { useState } from 'react';
-import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart, Bot, Sparkles } from 'lucide-react';
-import { Company, ProductType, ProductItem, ResourceType, IndustryType, ResourceItem } from '../../shared/types';
+import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart, Bot, Sparkles, PieChart, Layers } from 'lucide-react';
+import { ProductType, ResourceType, IndustryType } from '../../shared/types';
 import { Card, Button } from '../../shared/components';
 import { RESOURCE_ICONS } from '../../shared/assets';
 import { KLineChart } from '../../shared/components/charts/KLineChart';
 import { motion } from 'framer-motion';
-import { analyzeCompany } from '../../services/advisorService';
+import { analyzeCompany } from '../../infrastructure/ai/GeminiAdapter';
 import { useGameStore } from '../../shared/store/useGameStore';
 
 interface CompanyModalProps {
-  company: Company;
-  products: Record<ProductType, ProductItem>;
-  resources: Record<ResourceType, ResourceItem>;
-  marketWage: number;
+  companyId: string;
   onClose: () => void;
-  onUpdate: (id: string, updates: Partial<Company>) => void;
-  onDividend: (id: string) => void;
-  onPivot: (id: string, type: ProductType) => void; 
-  onAddLine: (id: string, type: IndustryType) => void;
 }
 
 export const CompanyModal: React.FC<CompanyModalProps> = ({ 
-  company, resources, onClose, onUpdate, onDividend
+  companyId, onClose
 }) => {
+  const company = useGameStore(s => s.gameState.companies.find(c => c.id === companyId));
+  const resources = useGameStore(s => s.gameState.resources);
+  const playerPortfolio = useGameStore(s => s.gameState.population.residents.find(r => r.isPlayer)?.portfolio);
+  
+  const updateCompany = useGameStore(s => s.updateCompany);
+  const payDividend = useGameStore(s => s.payDividend);
+
   const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'lines' | 'shareholders' | 'ai'>('overview');
   const [aiAnalysis, setAiAnalysis] = useState<string>("");
   const [analyzing, setAnalyzing] = useState(false);
   
-  const gameState = useGameStore(s => s.gameState);
-  const player = gameState.population.residents.find(r => r.isPlayer);
-  const ownedShares = player?.portfolio[company.id] || 0;
-  
+  if (!company) return null;
+
+  const ownedShares = playerPortfolio?.[company.id] || 0;
   const grainPrice = resources[ResourceType.GRAIN].currentPrice;
   const wageMultiplier = company.wageMultiplier || 1.5;
 
   const handleAnalysis = async () => {
       setAnalyzing(true);
-      const text = await analyzeCompany(company, gameState);
+      const text = await analyzeCompany(company, useGameStore.getState().gameState);
       setAiAnalysis(text);
       setAnalyzing(false);
+  };
+
+  const getStageColor = (stage: string) => {
+      if (stage === 'STARTUP') return 'text-blue-400 bg-blue-900/30 border-blue-800';
+      if (stage === 'GROWTH') return 'text-emerald-400 bg-emerald-900/30 border-emerald-800';
+      if (stage === 'MATURITY') return 'text-amber-400 bg-amber-900/30 border-amber-800';
+      return 'text-red-400 bg-red-900/30 border-red-800';
   };
 
   return (
@@ -58,6 +65,13 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       >
         <Card className={`w-full bg-stone-900 border-stone-700 max-h-[90vh] overflow-y-auto ${company.isBankrupt ? 'grayscale opacity-90' : ''}`} title={`公司控制台: ${company.name}`}>
           {company.isBankrupt && <div className="bg-red-900/80 text-white text-center p-2 mb-4 font-bold rounded">🚫 已破产</div>}
+
+          <div className="flex items-center gap-4 mb-4">
+              <span className={`px-2 py-0.5 rounded text-xs border font-bold ${getStageColor(company.stage || 'STARTUP')}`}>
+                  {company.stage || 'STARTUP'} STAGE
+              </span>
+              <span className="text-stone-500 text-xs">成立: {company.age || 0} 天</span>
+          </div>
 
           <div className="flex gap-2 mb-4 border-b border-stone-800 pb-2 overflow-x-auto whitespace-nowrap custom-scrollbar">
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'overview' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('overview')}><Activity size={12}/> 经营</button>
@@ -110,6 +124,26 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
 
             {activeTab === 'overview' && (
               <>
+                {/* Advanced KPIs */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="bg-stone-950 p-3 rounded border border-stone-800">
+                        <div className="text-[10px] text-stone-500 uppercase">ROE (权益回报)</div>
+                        <div className="text-lg font-mono text-emerald-400">{((company.kpis?.roe || 0) * 100).toFixed(1)}%</div>
+                    </div>
+                    <div className="bg-stone-950 p-3 rounded border border-stone-800">
+                        <div className="text-[10px] text-stone-500 uppercase">ROA (资产回报)</div>
+                        <div className="text-lg font-mono text-blue-400">{((company.kpis?.roa || 0) * 100).toFixed(1)}%</div>
+                    </div>
+                    <div className="bg-stone-950 p-3 rounded border border-stone-800">
+                        <div className="text-[10px] text-stone-500 uppercase">Leverage (杠杆)</div>
+                        <div className="text-lg font-mono text-amber-400">{(company.kpis?.leverage || 0).toFixed(2)}x</div>
+                    </div>
+                    <div className="bg-stone-950 p-3 rounded border border-stone-800">
+                        <div className="text-[10px] text-stone-500 uppercase">Tobin's Q</div>
+                        <div className="text-lg font-mono text-purple-400">{company.tobinQ?.toFixed(2)}</div>
+                    </div>
+                </div>
+
                 {company.isPlayerFounded && !company.isBankrupt && (
                     <div className="space-y-4 mb-6 bg-stone-950/50 p-4 rounded border border-stone-800">
                         <h4 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
@@ -127,7 +161,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                                         type="range" min="1.0" max="3.0" step="0.1" 
                                         value={wageMultiplier} 
                                         className="flex-1 accent-emerald-500 h-2 bg-stone-800 rounded-lg appearance-none cursor-pointer"
-                                        onChange={(e) => onUpdate(company.id, { wageMultiplier: parseFloat(e.target.value) })}
+                                        onChange={(e) => updateCompany(company.id, { wageMultiplier: parseFloat(e.target.value) })}
                                     />
                                     <span className="text-lg font-mono text-emerald-400 w-12 text-right">{wageMultiplier.toFixed(1)}x</span>
                                 </div>
@@ -156,7 +190,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                                         type="range" min="-0.5" max="0.5" step="0.05" 
                                         value={company.pricePremium || 0} 
                                         className="flex-1 accent-blue-600 h-2 bg-stone-800 rounded-lg appearance-none cursor-pointer"
-                                        onChange={(e) => onUpdate(company.id, { pricePremium: parseFloat(e.target.value) })}
+                                        onChange={(e) => updateCompany(company.id, { pricePremium: parseFloat(e.target.value) })}
                                     />
                                 </div>
                                 <div className="flex justify-between text-xs font-mono">
@@ -171,14 +205,14 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                             <div className="flex-1">
                                 <label className="text-xs text-stone-500 block mb-1">目标员工数: <span className="text-white font-bold">{company.targetEmployees}</span></label>
                                 <div className="flex items-center gap-2">
-                                    <button className="bg-stone-800 px-2 rounded hover:bg-stone-700" onClick={() => onUpdate(company.id, { targetEmployees: Math.max(0, company.targetEmployees - 1) })}>-</button>
-                                    <button className="bg-stone-800 px-2 rounded hover:bg-stone-700" onClick={() => onUpdate(company.id, { targetEmployees: company.targetEmployees + 1 })}>+</button>
+                                    <button className="bg-stone-800 px-2 rounded hover:bg-stone-700" onClick={() => updateCompany(company.id, { targetEmployees: Math.max(0, company.targetEmployees - 1) })}>-</button>
+                                    <button className="bg-stone-800 px-2 rounded hover:bg-stone-700" onClick={() => updateCompany(company.id, { targetEmployees: company.targetEmployees + 1 })}>+</button>
                                 </div>
                                 <div className="text-[10px] text-stone-500 mt-1">
                                     实际: {company.employees}人
                                 </div>
                             </div>
-                            <Button variant="success" size="sm" onClick={() => onDividend(company.id)} disabled={company.cash < 500}>分红</Button>
+                            <Button variant="success" size="sm" onClick={() => payDividend(company.id)} disabled={company.cash < 500}>分红</Button>
                         </div>
                     </div>
                 )}
@@ -208,7 +242,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                               <div className="p-2 bg-stone-900 rounded">{RESOURCE_ICONS[line.type]}</div>
                               <div>
                                   <div className="font-bold text-stone-200">{line.type === 'GRAIN' ? '粮食种植' : '面包烘焙'}</div>
-                                  <div className="text-xs text-stone-500">效率: 1.0 单位/人/天</div>
+                                  <div className="text-xs text-stone-500">效率: {(line.efficiency*100).toFixed(0)}% | 产出分配: {(line.allocation*100).toFixed(0)}%</div>
                               </div>
                           </div>
                       </div>

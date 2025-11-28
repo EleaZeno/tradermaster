@@ -1,21 +1,13 @@
 
 
 import { StateCreator } from 'zustand';
-import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings } from '../types';
+import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure } from '../types';
 import { INITIAL_STATE } from '../initialState';
-import { processGameTick } from '../../domain/gameLogic';
-import { MarketSystem } from '../../domain/systems/MarketSystem';
+import { processGameTick } from '../../application/GameLoop';
+import { MarketService } from '../../domain/market/MarketService';
 import { checkAchievements, ACHIEVEMENTS } from '../../services/achievementService';
 
-// --- Types ---
-export interface GameSlice {
-  gameState: GameState;
-  isRunning: boolean;
-  gameSpeed: number;
-  start: () => void;
-  stop: () => void;
-  setGameSpeed: (speed: number) => void;
-  tick: () => void;
+export interface UISlice {
   addLog: (log: string) => void;
   addEvent: (event: MarketEvent) => void;
   updateChatHistory: (history: any[]) => void;
@@ -24,14 +16,17 @@ export interface GameSlice {
   updateSettings: (settings: Partial<GameSettings> | Partial<GameSettings['notifications']>) => void;
 }
 
-export interface PlayerSlice {
+export interface MarketSlice {
   trade: (action: 'buy' | 'sell', itemId: IndustryType) => void;
+  buyFutures: (resId: ResourceType, type: 'LONG' | 'SHORT') => void;
+}
+
+export interface PlayerSlice {
   buyStock: (id: string, isFund?: boolean) => void;
   sellStock: (id: string, isFund?: boolean) => void;
   shortStock: (id: string, isFund?: boolean) => void;
   coverStock: (id: string, isFund?: boolean) => void;
-  buyFutures: (resId: ResourceType, type: 'LONG' | 'SHORT') => void;
-  setLivingStandard: (level: any) => void;
+  setLivingStandard: (level: Resident['livingStandard']) => void;
 }
 
 export interface CompanySlice {
@@ -45,62 +40,22 @@ export interface BankSlice {
   updateBank: (updates: Partial<Bank>) => void;
 }
 
-export type GameStore = GameSlice & PlayerSlice & CompanySlice & BankSlice;
+export interface GameSlice {
+  gameState: GameState;
+  isRunning: boolean;
+  gameSpeed: number;
+  start: () => void;
+  stop: () => void;
+  setGameSpeed: (speed: number) => void;
+  tick: () => void;
+}
 
-// --- Slices Implementation ---
+export type GameStore = GameSlice & UISlice & MarketSlice & PlayerSlice & CompanySlice & BankSlice;
 
-export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]], [], GameSlice> = (set) => ({
-  gameState: INITIAL_STATE,
-  isRunning: false,
-  gameSpeed: 1,
-
-  start: () => set((state) => { state.isRunning = true }),
-  stop: () => set((state) => { state.isRunning = false }),
-  setGameSpeed: (speed) => set((state) => { state.gameSpeed = speed }),
-
-  tick: () => set((state) => {
-    processGameTick(state.gameState);
-    if (state.gameState.logs.length > 50) state.gameState.logs = state.gameState.logs.slice(0, 50);
-
-    // Notification Cleanup (User Request): 
-    // 1. Remove notifications older than 5 seconds (Auto-dismiss)
-    // 2. Cap limit to 4 to prevent flooding
-    const now = Date.now();
-    state.gameState.notifications = state.gameState.notifications.filter(n => now - n.timestamp < 5000);
-    
-    if (state.gameState.notifications.length > 4) {
-         // Keep the 4 newest (slice from end)
-         state.gameState.notifications = state.gameState.notifications.slice(-4);
-    }
-
-    // Check Achievements
-    const newUnlocked = checkAchievements(state.gameState);
-    if (newUnlocked.length > 0) {
-        newUnlocked.forEach(id => {
-            state.gameState.achievements.push({ id, unlockedAt: Date.now() });
-            const meta = ACHIEVEMENTS.find(a => a.id === id);
-            
-            // Respect Settings
-            if (state.gameState.settings.notifications.achievements) {
-                const isEn = state.gameState.settings.language === 'en';
-                const msg = isEn 
-                    ? `🏆 Achievement Unlocked: ${meta?.name || id}`
-                    : `🏆 解锁成就: ${meta?.name || id} - ${meta?.description}`;
-                
-                state.gameState.notifications.push({
-                    id: `ach_${Date.now()}_${id}`,
-                    message: msg,
-                    type: 'success',
-                    timestamp: Date.now()
-                });
-            }
-            state.gameState.logs.unshift(`🏆 成就解锁: ${meta?.name}`);
-        });
-    }
-  }),
-
+export const createUISlice: StateCreator<GameStore, [["zustand/immer", never]], [], UISlice> = (set) => ({
   addLog: (log) => set((state) => {
     state.gameState.logs.unshift(log);
+    if (state.gameState.logs.length > 50) state.gameState.logs.pop();
   }),
 
   addEvent: (event) => set((state) => {
@@ -131,7 +86,6 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
   }),
 
   updateSettings: (settings) => set((state) => {
-      // Check if it's a notification update or root setting update
       if ('trades' in settings || 'achievements' in settings || 'news' in settings) {
           Object.assign(state.gameState.settings.notifications, settings);
       } else {
@@ -140,7 +94,7 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
   })
 });
 
-export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never]], [], PlayerSlice> = (set) => ({
+export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never]], [], MarketSlice> = (set) => ({
   trade: (action, itemId) => set((state) => {
     const residents = state.gameState.population.residents;
     const playerRes = residents.find(r => r.isPlayer);
@@ -149,7 +103,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     const isRes = Object.values(ResourceType).includes(itemId as ResourceType);
     let quantity = isRes ? 10 : 1;
 
-    MarketSystem.submitOrder(state.gameState, {
+    MarketService.submitOrder(state.gameState, {
       ownerId: playerRes.id,
       ownerType: 'RESIDENT',
       itemId: itemId,
@@ -160,76 +114,6 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     });
 
     state.gameState.cash = playerRes.cash;
-  }),
-
-  buyStock: (id, isFund) => set((state) => {
-    const player = state.gameState.population.residents.find(r => r.isPlayer);
-    if (!player) return;
-
-    if (!isFund) {
-      MarketSystem.submitOrder(state.gameState, {
-        ownerId: player.id,
-        ownerType: 'RESIDENT',
-        itemId: id,
-        side: 'BUY',
-        type: 'MARKET',
-        price: 0,
-        quantity: 100
-      });
-      state.gameState.cash = player.cash;
-    }
-  }),
-
-  sellStock: (id, isFund) => set((state) => {
-    const player = state.gameState.population.residents.find(r => r.isPlayer);
-    if (!player) return;
-
-    MarketSystem.submitOrder(state.gameState, {
-      ownerId: player.id,
-      ownerType: 'RESIDENT',
-      itemId: id,
-      side: 'SELL',
-      type: 'MARKET',
-      price: 0,
-      quantity: 100
-    });
-    state.gameState.cash = player.cash;
-  }),
-
-  shortStock: (id, isFund) => set((state) => {
-    const player = state.gameState.population.residents.find(r => r.isPlayer);
-    if (!player) return;
-
-    MarketSystem.submitOrder(state.gameState, {
-      ownerId: player.id,
-      ownerType: 'RESIDENT',
-      itemId: id,
-      side: 'SELL',
-      type: 'MARKET',
-      price: 0,
-      quantity: 100
-    });
-
-    state.gameState.cash = player.cash;
-    state.gameState.logs.unshift(`📈 做空 (Short) ${id} - 100股`);
-  }),
-
-  coverStock: (id, isFund) => set((state) => {
-    const player = state.gameState.population.residents.find(r => r.isPlayer);
-    if (!player) return;
-
-    MarketSystem.submitOrder(state.gameState, {
-      ownerId: player.id,
-      ownerType: 'RESIDENT',
-      itemId: id,
-      side: 'BUY',
-      type: 'MARKET',
-      price: 0,
-      quantity: 100
-    });
-
-    state.gameState.cash = player.cash;
-    state.gameState.logs.unshift(`📉 平仓 (Cover) ${id} + 100股`);
   }),
 
   buyFutures: (resId, type) => set((state) => {
@@ -248,6 +132,78 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
       state.gameState.futures.push(contract);
       state.gameState.logs.unshift(`📜 开仓 ${type} ${res.name}`);
     }
+  }),
+});
+
+export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never]], [], PlayerSlice> = (set) => ({
+  buyStock: (id, isFund) => set((state) => {
+    const player = state.gameState.population.residents.find(r => r.isPlayer);
+    if (!player) return;
+
+    if (!isFund) {
+      MarketService.submitOrder(state.gameState, {
+        ownerId: player.id,
+        ownerType: 'RESIDENT',
+        itemId: id,
+        side: 'BUY',
+        type: 'MARKET',
+        price: 0,
+        quantity: 100
+      });
+      state.gameState.cash = player.cash;
+    }
+  }),
+
+  sellStock: (id, isFund) => set((state) => {
+    const player = state.gameState.population.residents.find(r => r.isPlayer);
+    if (!player) return;
+
+    MarketService.submitOrder(state.gameState, {
+      ownerId: player.id,
+      ownerType: 'RESIDENT',
+      itemId: id,
+      side: 'SELL',
+      type: 'MARKET',
+      price: 0,
+      quantity: 100
+    });
+    state.gameState.cash = player.cash;
+  }),
+
+  shortStock: (id, isFund) => set((state) => {
+    const player = state.gameState.population.residents.find(r => r.isPlayer);
+    if (!player) return;
+
+    MarketService.submitOrder(state.gameState, {
+      ownerId: player.id,
+      ownerType: 'RESIDENT',
+      itemId: id,
+      side: 'SELL',
+      type: 'MARKET',
+      price: 0,
+      quantity: 100
+    });
+
+    state.gameState.cash = player.cash;
+    state.gameState.logs.unshift(`📈 做空 (Short) ${id} - 100股`);
+  }),
+
+  coverStock: (id, isFund) => set((state) => {
+    const player = state.gameState.population.residents.find(r => r.isPlayer);
+    if (!player) return;
+
+    MarketService.submitOrder(state.gameState, {
+      ownerId: player.id,
+      ownerType: 'RESIDENT',
+      itemId: id,
+      side: 'BUY',
+      type: 'MARKET',
+      price: 0,
+      quantity: 100
+    });
+
+    state.gameState.cash = player.cash;
+    state.gameState.logs.unshift(`📉 平仓 (Cover) ${id} + 100股`);
   }),
 
   setLivingStandard: (level) => set((state) => {
@@ -279,19 +235,25 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
         pricePremium: 0, executiveSalary: 3.0, dividendRate: 0, margin: 0.2,
         aiPersonality: 'BALANCED', boardMembers: [], unionTension: 0, strikeDays: 0,
         inventory: { raw: {}, finished: { [type]: 0 } },
-        // @ts-ignore
-        type: 'CORPORATION', wageStructure: 'PERFORMANCE', ceoId: 'res_player', isBankrupt: false, landTokens: 0,
-        avgCost: 0, accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0,
+        type: CompanyType.CORPORATION, 
+        wageStructure: WageStructure.PERFORMANCE, 
+        ceoId: 'res_player', 
+        isBankrupt: false, 
+        landTokens: 0,
+        avgCost: 0,
+        lastFixedCost: 0,
+        accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0,
         lastRevenue: 0, lastProfit: 0, monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: [],
-        tobinQ: 1.0
+        tobinQ: 1.0,
+        age: 0,
+        stage: 'STARTUP',
+        kpis: { roe: 0, roa: 0, roi: 0, leverage: 0, marketShare: 0 }
       });
       
-      // Init market for new company
       state.gameState.market[newId] = { bids: [], asks: [], lastPrice: 1.0, history: [] };
 
       state.gameState.logs.unshift(`🎉 ${name} 上市成功！`);
       
-      // Notify
       state.gameState.notifications.push({
           id: `ipo_${Date.now()}`,
           message: `新公司 ${name} IPO 成功，当前股价 1.0 oz`,
@@ -341,5 +303,50 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
 export const createBankSlice: StateCreator<GameStore, [["zustand/immer", never]], [], BankSlice> = (set) => ({
   updateBank: (updates) => set((state) => {
     Object.assign(state.gameState.bank, updates);
+  }),
+});
+
+export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]], [], GameSlice> = (set) => ({
+  gameState: INITIAL_STATE,
+  isRunning: false,
+  gameSpeed: 1,
+
+  start: () => set((state) => { state.isRunning = true }),
+  stop: () => set((state) => { state.isRunning = false }),
+  setGameSpeed: (speed) => set((state) => { state.gameSpeed = speed }),
+
+  tick: () => set((state) => {
+    processGameTick(state.gameState);
+    if (state.gameState.logs.length > 50) state.gameState.logs = state.gameState.logs.slice(0, 50);
+
+    const now = Date.now();
+    state.gameState.notifications = state.gameState.notifications.filter(n => now - n.timestamp < 5000);
+    
+    if (state.gameState.notifications.length > 4) {
+         state.gameState.notifications = state.gameState.notifications.slice(-4);
+    }
+
+    const newUnlocked = checkAchievements(state.gameState);
+    if (newUnlocked.length > 0) {
+        newUnlocked.forEach(id => {
+            state.gameState.achievements.push({ id, unlockedAt: Date.now() });
+            const meta = ACHIEVEMENTS.find(a => a.id === id);
+            
+            if (state.gameState.settings.notifications.achievements) {
+                const isEn = state.gameState.settings.language === 'en';
+                const msg = isEn 
+                    ? `🏆 Achievement Unlocked: ${meta?.name || id}`
+                    : `🏆 解锁成就: ${meta?.name || id} - ${meta?.description}`;
+                
+                state.gameState.notifications.push({
+                    id: `ach_${Date.now()}_${id}`,
+                    message: msg,
+                    type: 'success',
+                    timestamp: Date.now()
+                });
+            }
+            state.gameState.logs.unshift(`🏆 成就解锁: ${meta?.name}`);
+        });
+    }
   }),
 });

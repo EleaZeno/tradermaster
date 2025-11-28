@@ -25,6 +25,10 @@ export enum WageStructure {
   PERFORMANCE = 'PERFORMANCE'
 }
 
+export type LifecycleStage = 'STARTUP' | 'GROWTH' | 'MATURITY' | 'DECLINE';
+
+export type SkillLevel = 'NOVICE' | 'SKILLED' | 'EXPERT';
+
 export interface Candle {
   day: number;
   open: number;
@@ -88,12 +92,19 @@ export interface Deposit {
   interestRate: number;
 }
 
+export interface YieldCurve {
+  rate1d: number;
+  rate30d: number;
+  rate365d: number;
+}
+
 export interface Bank {
   reserves: number;
   totalDeposits: number;
   totalLoans: number;
-  depositRate: number; // Daily
-  loanRate: number;    // Daily
+  depositRate: number; // Base Rate
+  loanRate: number;    // Base Rate
+  yieldCurve: YieldCurve; // New: Term structure
   targetInflation: number; // Annualized target (e.g., 0.02)
   targetUnemployment: number; // Target rate (e.g., 0.05)
   loans: Loan[];
@@ -109,6 +120,8 @@ export interface Resident {
   wealth: number; 
   cash: number;   
   job: 'UNEMPLOYED' | 'FARMER' | 'WORKER' | 'EXECUTIVE' | 'MAYOR' | 'DEPUTY_MAYOR' | 'UNION_LEADER' | 'FINANCIER'; 
+  skill: SkillLevel; // New
+  xp: number;        // New: 0-100
   employerId?: string; 
   salary: number; 
   intelligence: number; 
@@ -137,6 +150,12 @@ export interface PopulationState {
   financiers: number;
   averageWage: number;
   averageHappiness: number;
+  consumerSentiment: number; // New: 0-100
+  demographics: {
+      births: number;
+      deaths: number;
+      immigration: number;
+  };
   wealthLevel: { low: number, mid: number, high: number };
 }
 
@@ -152,6 +171,7 @@ export interface FinancialReport {
     dividends: number;
     taxes: number;
     interest: number;
+    fixed: number; 
   };
   operatingMargin: number;
 }
@@ -170,10 +190,21 @@ export interface ProductionLine {
   allocation: number; 
 }
 
+export interface CompanyKPIs {
+    roe: number; // Return on Equity
+    roa: number; // Return on Assets
+    roi: number; // Return on Investment (Project specific)
+    leverage: number; // Debt / Equity
+    marketShare: number; 
+}
+
 export interface Company {
   id: string;
   name: string;
   description?: string;
+  age: number; // New
+  stage: LifecycleStage; // New
+  kpis: CompanyKPIs; // New
   productionLines: ProductionLine[];
   cash: number;
   sharePrice: number;
@@ -195,7 +226,7 @@ export interface Company {
   executiveSalary: number; 
   dividendRate: number;
   margin: number; 
-  tobinQ: number; // Valuation metric: Market Cap / Replacement Cost
+  tobinQ: number; 
   aiPersonality: 'AGGRESSIVE' | 'CONSERVATIVE' | 'BALANCED';
   boardMembers: string[]; 
   unionTension: number; 
@@ -205,7 +236,8 @@ export interface Company {
     finished: Partial<Record<IndustryType, number>>;
   };
   landTokens?: number; // Represents 'K' (Capital)
-  avgCost: number;
+  avgCost: number; // WAC (Weighted Average Cost)
+  lastFixedCost: number; 
   accumulatedRevenue: number;
   accumulatedCosts: number;
   accumulatedWages: number;
@@ -409,6 +441,7 @@ export interface GameSettings {
 export interface GameState {
   cash: number; 
   day: number;
+  totalTicks: number; // Optimization: Track engine ticks separate from days
   mayorId: string | null;
   cityTreasury: CityTreasury;
   bank: Bank; // Central Bank

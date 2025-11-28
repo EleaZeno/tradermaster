@@ -1,23 +1,23 @@
 
 import React, { useState, useMemo } from 'react';
-import { GameState, Company } from '../../shared/types';
+import { useGameStore } from '../../shared/store/useGameStore';
 import { Card } from '../../shared/components';
 import { Crown, Search, Landmark, ArrowUp, ArrowDown, Briefcase, TrendingUp, Activity, PieChart } from 'lucide-react';
-
-interface CityHallTabProps {
-  gameState: GameState;
-  companies: Company[];
-}
+import { useShallow } from 'zustand/react/shallow';
 
 type SortKey = 'id' | 'wealth' | 'cash' | 'intelligence' | 'production';
 type SortOrder = 'asc' | 'desc';
 
-export const CityHallTab: React.FC<CityHallTabProps> = ({ gameState, companies }) => {
+export const CityHallTab: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>('wealth');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
-  const { mayorId, population, cityTreasury, economicOverview } = gameState;
+  const mayorId = useGameStore(s => s.gameState.mayorId);
+  const population = useGameStore(s => s.gameState.population);
+  const cityTreasury = useGameStore(s => s.gameState.cityTreasury);
+  const economicOverview = useGameStore(s => s.gameState.economicOverview);
+  const companies = useGameStore(s => s.gameState.companies);
   
   const mayor = population.residents.find(r => r.id === mayorId);
   const playerIsMayor = mayorId === 'res_player';
@@ -56,7 +56,7 @@ export const CityHallTab: React.FC<CityHallTabProps> = ({ gameState, companies }
         return 0;
     });
 
-    return list.slice(0, 50);
+    return list.slice(0, 200); 
   }, [population.residents, searchTerm, sortKey, sortOrder]);
 
   const handleSort = (key: SortKey) => {
@@ -224,16 +224,16 @@ export const CityHallTab: React.FC<CityHallTabProps> = ({ gameState, companies }
              </div>
              
              {/* List Body */}
-             <div className="h-[500px] overflow-y-auto custom-scrollbar">
-               {filteredResidents.map(res => (
-                   <div key={res.id} className={`grid grid-cols-12 items-center hover:bg-stone-800 border-b border-stone-800 ${res.isPlayer ? 'bg-blue-950/20' : ''}`}>
+             <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                {filteredResidents.map(res => (
+                   <div key={res.id} className={`grid grid-cols-12 items-center hover:bg-stone-800 border-b border-stone-800 ${res.isPlayer ? 'bg-blue-950/20' : ''} h-[60px]`}>
                          <div className="col-span-4 px-4 py-2 font-medium text-white flex items-center gap-2 overflow-hidden">
-                            <span className="truncate">{res.name}</span>
+                            <span className="truncate text-xs">{res.name}</span>
                             {res.isPlayer && <span className="bg-blue-600 text-white text-[10px] px-1.5 rounded shrink-0">YOU</span>}
                             {res.id === mayorId && <Crown size={12} className="text-amber-500 shrink-0"/>}
                          </div>
                          <div className="col-span-4 px-4 py-2 flex flex-col justify-center">
-                             <span className={`w-fit px-2 py-0.5 rounded text-xs mb-1 flex items-center gap-1 ${
+                             <span className={`w-fit px-2 py-0.5 rounded text-[10px] mb-1 flex items-center gap-1 ${
                                 res.job === 'UNEMPLOYED' ? 'bg-red-900/50 text-red-400' :
                                 res.job === 'FARMER' ? 'bg-stone-700 text-stone-300' :
                                 res.job === 'WORKER' ? 'bg-emerald-900/50 text-emerald-400' :
@@ -258,11 +258,11 @@ export const CityHallTab: React.FC<CityHallTabProps> = ({ gameState, companies }
                                 <span className="text-stone-600 text-xs">-</span>
                              )}
                          </div>
-                         <div className="col-span-2 px-4 py-2 text-right font-mono text-emerald-500 flex items-center justify-end">
+                         <div className="col-span-2 px-4 py-2 text-right font-mono text-emerald-500 text-xs flex items-center justify-end">
                             {Math.floor(res.cash).toLocaleString()} oz
                          </div>
-                    </div>
-               ))}
+                   </div>
+                ))}
              </div>
           </div>
       </Card>

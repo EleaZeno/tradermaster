@@ -1,26 +1,23 @@
 
 import React from 'react';
 import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
-import { Company, ProductType, Fund } from '../../shared/types';
 import { Card, Button } from '../../shared/components';
 import { useGameStore } from '../../shared/store/useGameStore';
+import { useShallow } from 'zustand/react/shallow';
 
 interface CompaniesTabProps {
-  companies: Company[];
-  funds: Fund[];
-  products: Record<ProductType, any>;
-  cash: number;
-  onBuy: (id: string, isFund?: boolean) => void;
-  onSell: (id: string, isFund?: boolean) => void;
-  onShort: (id: string, isFund?: boolean) => void;
-  onCover: (id: string, isFund?: boolean) => void;
   onSelectCompany: (id: string) => void;
 }
 
-export const CompaniesTab: React.FC<CompaniesTabProps> = ({ companies, funds, cash, onBuy, onSell, onSelectCompany }) => {
+export const CompaniesTab: React.FC<CompaniesTabProps> = ({ onSelectCompany }) => {
+  const companies = useGameStore(s => s.gameState.companies);
+  const cash = useGameStore(s => s.gameState.cash);
+  const player = useGameStore(useShallow(s => s.gameState.population.residents.find(r => r.isPlayer)));
+  
+  const buyStock = useGameStore(s => s.buyStock);
+  const sellStock = useGameStore(s => s.sellStock);
   const shortStock = useGameStore(s => s.shortStock);
   const coverStock = useGameStore(s => s.coverStock);
-  const player = useGameStore(s => s.gameState.population.residents.find(r => r.isPlayer));
 
   return (
     <div className="space-y-8 animate-in fade-in">
@@ -99,9 +96,9 @@ export const CompaniesTab: React.FC<CompaniesTabProps> = ({ companies, funds, ca
                              </>
                         ) : (
                              <>
-                                <Button className="flex-1" size="sm" onClick={() => onBuy(comp.id)} disabled={cash < comp.sharePrice * 100}>买入</Button>
+                                <Button className="flex-1" size="sm" onClick={() => buyStock(comp.id)} disabled={cash < comp.sharePrice * 100}>买入</Button>
                                 {owned > 0 ? (
-                                    <Button className="flex-1" size="sm" variant="secondary" onClick={() => onSell(comp.id)}>卖出</Button>
+                                    <Button className="flex-1" size="sm" variant="secondary" onClick={() => sellStock(comp.id)}>卖出</Button>
                                 ) : (
                                     <Button className="flex-1" size="sm" variant="danger" onClick={() => shortStock(comp.id)} title="卖出你没有的股票 (做空)">做空</Button>
                                 )}

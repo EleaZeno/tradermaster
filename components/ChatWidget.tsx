@@ -2,23 +2,26 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Bot, Send, X } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
-import { GameState, GodModeData, ChatMessage } from '../shared/types';
-import { getFinancialAdvisorResponse } from '../services/advisorService';
+import { ChatMessage } from '../shared/types';
+import { getFinancialAdvisorResponse } from '../infrastructure/ai/GeminiAdapter';
 import { useGameStore } from '../shared/store/useGameStore';
+import { useGodModeData } from '../shared/hooks/useGodModeData';
+import { useShallow } from 'zustand/react/shallow';
+import DOMPurify from 'dompurify';
 
 // @ts-ignore
 const marked = window.marked;
 
-interface ChatWidgetProps {
-  gameState: GameState;
-  godModeData: GodModeData;
-  onUpdateHistory: (history: ChatMessage[]) => void;
-}
-
-export const ChatWidget: React.FC<ChatWidgetProps> = ({ gameState, godModeData, onUpdateHistory }) => {
+export const ChatWidget: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  const chatHistory = useGameStore(s => s.gameState.chatHistory);
+  const updateChatHistory = useGameStore(s => s.updateChatHistory);
+  
+  const gameState = useGameStore(s => s.gameState);
+  const godModeData = useGodModeData(gameState);
 
   const aiMutation = useMutation({
     mutationFn: async ({ message, history }: { message: string, history: ChatMessage[] }) => {
@@ -28,25 +31,33 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ gameState, godModeData, 
     onSuccess: (data) => {
       const currentHistory = useGameStore.getState().gameState.chatHistory;
       const botMsg: ChatMessage = { role: 'model', text: data, timestamp: Date.now() };
-      onUpdateHistory([...currentHistory, botMsg]);
+      updateChatHistory([...currentHistory, botMsg]);
     }
   });
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [gameState.chatHistory, isOpen, aiMutation.isPending]);
+  }, [chatHistory, isOpen, aiMutation.isPending]);
 
   const handleSend = async () => {
     if (!input.trim() || aiMutation.isPending) return;
     
-    const userMsg: ChatMessage = { role: 'user', text: input, timestamp: Date.now() };
-    const newHistory = [...gameState.chatHistory, userMsg];
+    const sanitizedInput = input.replace(/</g, "&lt;").replace(/>/g, "&gt;");
     
-    onUpdateHistory(newHistory);
-    const msgToSend = input;
+    const userMsg: ChatMessage = { role: 'user', text: sanitizedInput, timestamp: Date.now() };
+    const newHistory = [...chatHistory, userMsg];
+    
+    updateChatHistory(newHistory);
+    const msgToSend = sanitizedInput;
     setInput("");
 
     aiMutation.mutate({ message: msgToSend, history: newHistory });
+  };
+
+  const renderMessageContent = (text: string) => {
+      if (!marked) return text;
+      const rawHtml = marked.parse(text);
+      return DOMPurify.sanitize(rawHtml as string);
   };
 
   return (
@@ -58,11 +69,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({ gameState, godModeData, 
              <button onClick={() => setIsOpen(false)} className="text-stone-500 hover:text-white"><X size={16} /></button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-stone-950/90 custom-scrollbar">
-             {gameState.chatHistory.map((msg, idx) => (
+             {chatHistory.map((msg, idx) => (
                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                  <div 
                   className={`max-w-[85%] rounded-lg p-3 text-xs leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-stone-800 text-stone-300 border border-stone-700'}`}
-                  dangerouslySetInnerHTML={{ __html: marked ? marked.parse(msg.text) : msg.text }}
+                  dangerouslySetInnerHTML={{ __html: renderMessageContent(msg.text) }}
                  />
                </div>
              ))}

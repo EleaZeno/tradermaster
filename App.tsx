@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  Wheat, Building2, BarChart3, Landmark, Plus, Settings, AlertTriangle, Briefcase, Beaker, Menu 
+  Wheat, Building2, BarChart3, Landmark, Plus, Settings, AlertTriangle, Briefcase, Beaker
 } from 'lucide-react';
 import { useGameStore } from './shared/store/useGameStore';
 import { useGameLoop } from './shared/hooks/useGameLoop';
 import { usePerformanceMonitor } from './shared/hooks/usePerformanceMonitor';
 import { useResponsive } from './shared/hooks/useResponsive';
-import { IndustryStat, IndustryType, NewsEvent } from './shared/types';
+import { NewsEvent } from './shared/types';
 import { Button, Card } from './shared/components';
 import { Header } from './components/Header';
 import { CommoditiesTab } from './features/commodities/CommoditiesTab';
@@ -19,49 +19,45 @@ import { ValidationTab } from './features/validation/ValidationTab';
 import { ChatWidget } from './components/ChatWidget';
 import { CompanyModal } from './features/companies/CompanyModal';
 import { CreateCompanyModal } from './features/companies/CreateCompanyModal';
-import { generateMarketEvent } from './services/advisorService';
-import { useGodModeData } from './shared/hooks/useGodModeData';
+import { generateMarketEvent } from './infrastructure/ai/GeminiAdapter';
 import { ToastContainer } from './components/ui/ToastContainer';
+import { DevTools } from './components/devtools/DevTools';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useShallow } from 'zustand/react/shallow';
 
 const App: React.FC = () => {
   useGameLoop();
   usePerformanceMonitor();
   const { isMobile, isDesktop } = useResponsive();
 
-  // Store Selectors
-  const gameState = useGameStore(s => s.gameState);
   const isRunning = useGameStore(s => s.isRunning);
-  const gameSpeed = useGameStore(s => s.gameSpeed);
+  const day = useGameStore(s => s.gameState.day);
+  
+  const notificationsSettings = useGameStore(s => s.gameState.settings.notifications);
+  const latestEvent = useGameStore(s => s.gameState.events[0]);
+  const logs = useGameStore(s => s.gameState.logs);
+  const myCompanies = useGameStore(useShallow(s => s.gameState.companies.filter(c => c.isPlayerFounded)));
+  
   const start = useGameStore(s => s.start);
-  const stop = useGameStore(s => s.stop);
   const setGameSpeed = useGameStore(s => s.setGameSpeed);
-  const updateChatHistory = useGameStore(s => s.updateChatHistory);
   const addLog = useGameStore(s => s.addLog);
   const addEvent = useGameStore(s => s.addEvent); 
-  
   const createCompany = useGameStore(s => s.createCompany);
-  const updateCompany = useGameStore(s => s.updateCompany);
-  const payDividend = useGameStore(s => s.payDividend);
-  const addLine = useGameStore(s => s.addLine);
-  const trade = useGameStore(s => s.trade);
-  const buyFutures = useGameStore(s => s.buyFutures);
-  const buyStock = useGameStore(s => s.buyStock);
-  const sellStock = useGameStore(s => s.sellStock);
-  const setLivingStandard = useGameStore(s => s.setLivingStandard);
-
+  
   const [activeTab, setActiveTab] = useState<'commodities' | 'companies' | 'stats' | 'cityhall' | 'banking' | 'validation'>('commodities');
   const [showCreateCompany, setShowCreateCompany] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
-
-  const godModeData = useGodModeData(gameState);
+  
+  // DevTools State
+  const [showDevTools, setShowDevTools] = useState(false);
 
   useEffect(() => {
-      if (isRunning && gameState.day % 1 === 0) { 
+      if (isRunning && day % 1 === 0) { 
          const tryGenerateEvent = async () => {
-             if (gameState.events.length > 0 && gameState.day - gameState.events[0].turnCreated < 5) return;
+             const currentEvents = useGameStore.getState().gameState.events;
+             if (currentEvents.length > 0 && day - currentEvents[0].turnCreated < 5) return;
              
-             const evt = await generateMarketEvent(gameState.day);
+             const evt = await generateMarketEvent(day);
              if (evt) {
                  addEvent(evt);
                  addLog(`📢 突发新闻: ${evt.headline}`);
@@ -69,16 +65,11 @@ const App: React.FC = () => {
          };
          tryGenerateEvent();
       }
-  }, [gameState.day, isRunning]);
+  }, [day, isRunning]);
 
-  const industryStats: IndustryStat[] = []; 
-
-  const selectedCompany = gameState.companies.find(c => c.id === selectedCompanyId);
-  const latestEvent = gameState.events.length > 0 ? gameState.events[0] : null;
-  // Type check for safe access
   const latestNewsEvent = (latestEvent && latestEvent.type === 'NEWS') ? (latestEvent as NewsEvent) : null;
 
-  const handleCreateCompany = (name: string, type: IndustryType) => {
+  const handleCreateCompany = (name: string, type: any) => {
       createCompany(name, type);
       setShowCreateCompany(false);
   };
@@ -88,7 +79,6 @@ const App: React.FC = () => {
       if (!isRunning) start();
   };
 
-  // --- Mobile Components ---
   const MobileNav = () => (
     <div className="sticky top-16 z-30 bg-stone-900 border-b border-stone-800 overflow-x-auto">
         <div className="flex p-2 gap-2 min-w-max">
@@ -105,7 +95,7 @@ const App: React.FC = () => {
   const SidebarContent = () => (
     <>
         <AnimatePresence>
-            {latestNewsEvent && (gameState.day - latestNewsEvent.turnCreated < 5) && gameState.settings.notifications.news && (
+            {latestNewsEvent && (day - latestNewsEvent.turnCreated < 5) && notificationsSettings.news && (
                 <motion.div 
                     initial={{ opacity: 0, y: -20, scale: 0.9 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -141,7 +131,7 @@ const App: React.FC = () => {
 
         <Card className="bg-gradient-to-b from-stone-800 to-stone-900 border-stone-700 mb-4" title="我的商业帝国">
             <div className="space-y-2">
-                {gameState.companies.filter(c => c.isPlayerFounded).map(c => (
+                {myCompanies.map(c => (
                 <motion.div 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -158,7 +148,7 @@ const App: React.FC = () => {
                     <Settings size={14} className="text-stone-500"/>
                 </motion.div>
                 ))}
-                {gameState.companies.filter(c => c.isPlayerFounded).length === 0 && (
+                {myCompanies.length === 0 && (
                     <div className="text-xs text-stone-500 text-center py-2">暂无公司</div>
                 )}
                 <Button className="w-full mt-2" variant="success" size="sm" onClick={() => setShowCreateCompany(true)}>
@@ -169,8 +159,8 @@ const App: React.FC = () => {
 
         <Card className="flex flex-col bg-stone-900 border-stone-800" title="系统日志">
             <div className={`flex-1 text-xs font-mono overflow-y-auto custom-scrollbar ${isMobile ? 'h-[150px]' : 'h-[190px]'}`}>
-                {gameState.logs.map((log, index) => {
-                    const logDay = Math.max(1, gameState.day - Math.floor(index / 3)); 
+                {logs.map((log, index) => {
+                    const logDay = Math.max(1, day - Math.floor(index / 3)); 
                     return (
                     <div key={index} className="border-b border-stone-800 flex items-center px-2 py-1 hover:bg-stone-800/50 transition-colors">
                         <span className="text-stone-600 mr-2 min-w-[30px] text-[10px] select-none text-right">[{logDay}]</span>
@@ -186,25 +176,21 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-stone-950 text-stone-200 font-sans pb-20">
       <Header 
-        gameState={gameState} 
-        isRunning={isRunning} 
-        gameSpeed={gameSpeed} 
-        onStop={stop} 
-        onSetGameSpeed={handleSpeedChange} 
-        onSetLivingStandard={setLivingStandard}
+        onStop={useGameStore.getState().stop} 
+        onSetGameSpeed={handleSpeedChange}
+        onToggleDevTools={() => setShowDevTools(p => !p)}
       />
 
       <ToastContainer />
+      <DevTools isOpen={showDevTools} onToggle={() => setShowDevTools(p => !p)} /> 
       
       {isMobile && <MobileNav />}
 
       <main className={`pt-24 pb-10 px-4 max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 ${isMobile ? 'pt-4' : ''}`}>
-         {/* Sidebar / Top Content on Mobile */}
          <div className={`lg:col-span-3 space-y-4 h-fit ${isDesktop ? 'sticky top-24' : 'order-last'}`}>
             <SidebarContent />
          </div>
 
-         {/* Main Content */}
          <div className="lg:col-span-9 space-y-6">
             <AnimatePresence mode="wait">
                 <motion.div 
@@ -214,64 +200,29 @@ const App: React.FC = () => {
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ duration: 0.2 }}
                 >
-                    {activeTab === 'commodities' && (
-                    <CommoditiesTab 
-                        resources={gameState.resources} 
-                        products={gameState.products} 
-                        cash={gameState.cash} 
-                        futures={gameState.futures}
-                        day={gameState.day}
-                        onTrade={trade} 
-                        onBuyFutures={buyFutures}
-                    />
-                    )}
+                    {activeTab === 'commodities' && <CommoditiesTab />}
 
                     {activeTab === 'companies' && (
-                    <CompaniesTab 
-                        companies={gameState.companies} 
-                        funds={gameState.funds}
-                        products={gameState.products} 
-                        cash={gameState.cash}
-                        onBuy={(id, isFund) => buyStock(id, isFund)}
-                        onSell={(id, isFund) => sellStock(id, isFund)}
-                        onShort={(id, isFund) => sellStock(id, isFund)} 
-                        onCover={(id, isFund) => buyStock(id, isFund)}
-                        onSelectCompany={setSelectedCompanyId}
-                    />
+                        <CompaniesTab onSelectCompany={setSelectedCompanyId} />
                     )}
 
-                    {activeTab === 'banking' && (
-                    <BankingTab bank={gameState.bank} />
-                    )}
+                    {activeTab === 'banking' && <BankingTab />}
 
-                    {activeTab === 'stats' && (
-                    <StatsTab gameState={gameState} industryStats={industryStats} />
-                    )}
+                    {activeTab === 'stats' && <StatsTab />}
 
-                    {activeTab === 'cityhall' && (
-                    <CityHallTab gameState={gameState} companies={gameState.companies} />
-                    )}
+                    {activeTab === 'cityhall' && <CityHallTab />}
 
-                    {activeTab === 'validation' && (
-                    <ValidationTab gameState={gameState} />
-                    )}
+                    {activeTab === 'validation' && <ValidationTab />}
                 </motion.div>
             </AnimatePresence>
          </div>
       </main>
 
-      <ChatWidget 
-        gameState={gameState} 
-        godModeData={godModeData} 
-        onUpdateHistory={updateChatHistory} 
-      />
+      <ChatWidget />
 
       <AnimatePresence>
       {showCreateCompany && (
         <CreateCompanyModal 
-          products={gameState.products}
-          resources={gameState.resources}
-          cash={gameState.cash} 
           onClose={() => setShowCreateCompany(false)} 
           onCreate={handleCreateCompany} 
         />
@@ -279,17 +230,10 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       <AnimatePresence>
-      {selectedCompany && (
+      {selectedCompanyId && (
         <CompanyModal 
-          company={selectedCompany} 
-          products={gameState.products} 
-          resources={gameState.resources}
-          marketWage={gameState.population.averageWage}
+          companyId={selectedCompanyId} 
           onClose={() => setSelectedCompanyId(null)}
-          onUpdate={updateCompany}
-          onDividend={payDividend}
-          onPivot={() => {}}
-          onAddLine={addLine}
         />
       )}
       </AnimatePresence>

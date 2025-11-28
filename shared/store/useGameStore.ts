@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { 
@@ -6,7 +5,9 @@ import {
   createGameSlice, 
   createPlayerSlice, 
   createCompanySlice, 
-  createBankSlice 
+  createBankSlice,
+  createMarketSlice,
+  createUISlice
 } from './slices';
 
 export const useGameStore = create<GameStore>()(
@@ -15,5 +16,7 @@ export const useGameStore = create<GameStore>()(
     ...createPlayerSlice(...a),
     ...createCompanySlice(...a),
     ...createBankSlice(...a),
+    ...createMarketSlice(...a),
+    ...createUISlice(...a),
   }))
 );

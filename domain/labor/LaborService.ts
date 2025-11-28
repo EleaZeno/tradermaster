@@ -1,18 +1,21 @@
 
 
-import { GameState, Company, Resident, GameContext } from '../../shared/types';
-import { Transaction } from '../utils/Transaction';
+import { GameState, Company, Resident, GameContext, SkillLevel } from '../../shared/types';
+import { TransactionService } from '../finance/TransactionService';
 import { GAME_CONFIG } from '../../shared/config';
 
-export class LaborSystem {
+export class LaborService {
   static process(gameState: GameState, context: GameContext, livingCostBenchmark: number, wagePressureMod: number): void {
     const { companies } = gameState;
     const residents = gameState.population.residents;
 
-    // 0. Inflation Wage Adjustment (Macro Linkage)
-    LaborSystem.adjustReservationWages(gameState);
+    // 0. Inflation Wage Adjustment (Wage-Price Spiral)
+    LaborService.adjustReservationWages(gameState);
 
-    LaborSystem.processSocialMobility(gameState);
+    // 1. Process Skills (XP Gain)
+    LaborService.processSkills(gameState);
+
+    LaborService.processSocialMobility(gameState);
 
     const employeesByCompany = context.employeesByCompany;
 
@@ -21,16 +24,33 @@ export class LaborSystem {
       
       const companyEmployees = employeesByCompany[company.id] || [];
 
-      LaborSystem.processUnionPolitics(company, companyEmployees, gameState);
-      LaborSystem.updateWageOffer(company, livingCostBenchmark);
+      LaborService.processUnionPolitics(company, companyEmployees, gameState);
+      LaborService.updateWageOffer(company, livingCostBenchmark);
 
       if (!company.isPlayerFounded) {
-        LaborSystem.adjustAIStrategy(company, companyEmployees, wagePressureMod);
+        LaborService.adjustAIStrategy(company, companyEmployees, wagePressureMod);
       }
 
-      LaborSystem.payExecutives(company, companyEmployees, gameState, context);
-      LaborSystem.manageHeadcount(company, companyEmployees, residents, gameState, context);
+      LaborService.payExecutives(company, companyEmployees, gameState, context);
+      LaborService.manageHeadcount(company, companyEmployees, residents, gameState, context);
     });
+  }
+
+  private static processSkills(state: GameState): void {
+      state.population.residents.forEach(r => {
+          if (r.job !== 'UNEMPLOYED' && r.employerId) {
+              r.xp += GAME_CONFIG.LABOR.XP_PER_DAY;
+              
+              // Level Up Logic
+              if (r.skill === 'NOVICE' && r.xp >= GAME_CONFIG.LABOR.SKILL_THRESHOLDS.SKILLED) {
+                  r.skill = 'SKILLED';
+                  state.logs.unshift(`🎓 ${r.name} 晋升为熟练工 (Skilled)`);
+              } else if (r.skill === 'SKILLED' && r.xp >= GAME_CONFIG.LABOR.SKILL_THRESHOLDS.EXPERT) {
+                  r.skill = 'EXPERT';
+                  state.logs.unshift(`🎓 ${r.name} 晋升为专家 (Expert)`);
+              }
+          }
+      });
   }
 
   private static adjustReservationWages(gameState: GameState): void {
@@ -38,26 +58,21 @@ export class LaborSystem {
       if (history.length < 2) return;
       
       const lastInflation = history[history.length - 1].inflation;
-      if (Math.abs(lastInflation) < 0.0001) return;
-
-      // Real Wage Stickiness Logic
-      // If Inflation > 0, reservation wages rise slowly (sticky up)
-      // If Deflation > 0, reservation wages drop VERY slowly (sticky down)
-      
-      const adjustmentFactor = lastInflation * GAME_CONFIG.ECONOMY.WAGE_SENSITIVITY;
+      const sensitivity = GAME_CONFIG.ECONOMY.WAGE_SENSITIVITY;
       
       gameState.population.residents.forEach(res => {
-          // Nominal wage expectation increases with inflation
-          const change = res.reservationWage * adjustmentFactor;
-          // Apply change (workers resist wage cuts more than they demand raises)
-          if (change > 0) {
-              res.reservationWage += change; 
-          } else {
-              res.reservationWage += change * 0.1; // Sticky downwards
-          }
+          // 1. Inflation adjustment
+          const change = res.reservationWage * lastInflation * sensitivity;
+          if (change > 0) res.reservationWage += change; 
+          else res.reservationWage += change * 0.1; 
           
-          // Minimum floor
-          res.reservationWage = Math.max(0.5, res.reservationWage);
+          // 2. Skill Premium adjustment
+          let skillMultiplier = 1.0;
+          if (res.skill === 'SKILLED') skillMultiplier = 1.5;
+          if (res.skill === 'EXPERT') skillMultiplier = 2.5;
+          
+          // Ensure reservation wage reflects skill
+          res.reservationWage = Math.max(res.reservationWage, 1.5 * skillMultiplier);
       });
   }
 
@@ -133,8 +148,6 @@ export class LaborSystem {
         targetMultiplier = Math.max(targetMultiplier, 2.2); 
     }
 
-    // New: Wage offer must compete with CPI/Living Costs, not just raw benchmark
-    // Benchmark is essentially CPI-proxy, but we ensure it covers reservation wages
     let offer = parseFloat((benchmark * targetMultiplier).toFixed(2));
     
     const survivalWage = benchmark * 1.3;
@@ -182,7 +195,7 @@ export class LaborSystem {
       }
 
       if (company.cash >= salary) {
-        Transaction.transfer(company, exec, salary, { treasury: gameState.cityTreasury, residents: gameState.population.residents, context });
+        TransactionService.transfer(company, exec, salary, { treasury: gameState.cityTreasury, residents: gameState.population.residents, context });
         company.accumulatedCosts += salary;
       }
     });
@@ -199,7 +212,7 @@ export class LaborSystem {
       // LABOR SUPPLY LOGIC: Check Reservation Wage
       const candidate = allResidents.find(r => 
           r.job === 'FARMER' && 
-          r.reservationWage <= company.wageOffer && // CRITICAL: Workers now have reservation wages linked to inflation
+          r.reservationWage <= company.wageOffer && 
           r.happiness < 90
       );
       
@@ -211,7 +224,7 @@ export class LaborSystem {
         if (context.employeesByCompany[company.id]) context.employeesByCompany[company.id].push(candidate);
         
         // Signing Bonus
-        Transaction.transfer(company, candidate, company.wageOffer * 0.5, { treasury: gameState.cityTreasury, residents: allResidents, context });
+        TransactionService.transfer(company, candidate, company.wageOffer * 0.5, { treasury: gameState.cityTreasury, residents: allResidents, context });
       }
     } 
     // Firing
@@ -225,7 +238,7 @@ export class LaborSystem {
         const idx = context.employeesByCompany[company.id]?.indexOf(workerToFire);
         if (idx > -1) context.employeesByCompany[company.id].splice(idx, 1);
         
-        Transaction.transfer(company, workerToFire, company.wageOffer * 2, { treasury: gameState.cityTreasury, residents: allResidents, context });
+        TransactionService.transfer(company, workerToFire, company.wageOffer * 2, { treasury: gameState.cityTreasury, residents: allResidents, context });
       }
     }
   }

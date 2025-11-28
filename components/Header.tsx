@@ -1,33 +1,39 @@
 
-
 import React, { memo, useState } from 'react';
-import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy, Settings } from 'lucide-react';
-import { GameState, LivingStandard } from '../shared/types';
+import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy, Settings, Terminal } from 'lucide-react';
+import { LivingStandard } from '../shared/types';
 import { AchievementsModal } from './modals/AchievementsModal';
 import { SettingsModal } from './modals/SettingsModal';
 import { useResponsive } from '../shared/hooks/useResponsive';
 import { getTranslation } from '../shared/utils/i18n';
+import { useGameStore } from '../shared/store/useGameStore';
+import { useShallow } from 'zustand/react/shallow';
 
 interface HeaderProps {
-  gameState: GameState;
-  isRunning: boolean;
-  gameSpeed: number;
   onStop: () => void;
   onSetGameSpeed: (speed: number) => void;
-  onSetLivingStandard: (level: LivingStandard) => void;
+  onToggleDevTools: () => void;
 }
 
 export const Header = memo<HeaderProps>(({ 
-  gameState, isRunning, gameSpeed, onStop, onSetGameSpeed, onSetLivingStandard 
+  onStop, onSetGameSpeed, onToggleDevTools
 }) => {
   const [showAchievements, setShowAchievements] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
-  const player = gameState.population.residents.find(r => r.isPlayer);
-  const unlockedCount = gameState.achievements.length;
+  // Select only what is needed
+  const isRunning = useGameStore(s => s.isRunning);
+  const gameSpeed = useGameStore(s => s.gameSpeed);
+  const cash = useGameStore(s => s.gameState.cash);
+  const day = useGameStore(s => s.gameState.day);
+  const achievements = useGameStore(s => s.gameState.achievements);
+  const lang = useGameStore(s => s.gameState.settings.language);
+  const player = useGameStore(useShallow(s => s.gameState.population.residents.find(r => r.isPlayer)));
+  const setLivingStandard = useGameStore(s => s.setLivingStandard);
+
+  const unlockedCount = achievements.length;
   const { isDesktop, isMobile } = useResponsive();
   
-  const lang = gameState.settings.language;
   const t = (key: string) => getTranslation(key, lang);
 
   return (
@@ -46,6 +52,14 @@ export const Header = memo<HeaderProps>(({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 text-sm font-mono">
+         <button 
+             onClick={onToggleDevTools}
+             className="flex items-center gap-2 text-stone-400 hover:text-emerald-400 transition-colors bg-stone-800/50 px-2 sm:px-3 py-1.5 rounded hover:bg-stone-800"
+             title="Developer Tools (Ctrl+Shift+D)"
+         >
+             <Terminal size={14} />
+         </button>
+
          <button 
              onClick={() => setShowAchievements(true)}
              className="flex items-center gap-2 text-stone-400 hover:text-amber-400 transition-colors bg-stone-800/50 px-2 sm:px-3 py-1.5 rounded hover:bg-stone-800"
@@ -70,7 +84,7 @@ export const Header = memo<HeaderProps>(({
                  <select 
                       className="bg-stone-800 text-xs text-stone-300 focus:outline-none"
                       value={player.livingStandard}
-                      onChange={(e) => onSetLivingStandard(e.target.value as LivingStandard)}
+                      onChange={(e) => setLivingStandard(e.target.value as LivingStandard)}
                  >
                      <option value="SURVIVAL">Survival</option>
                      <option value="BASIC">Basic</option>
@@ -82,11 +96,11 @@ export const Header = memo<HeaderProps>(({
 
          <div className="flex items-center gap-2 text-amber-400 bg-amber-950/30 px-2 sm:px-3 py-1.5 rounded border border-amber-900/50 shadow-inner">
             <Wallet size={14} />
-            {Math.floor(gameState.cash)} <span className="hidden sm:inline">oz</span>
+            {Math.floor(cash)} <span className="hidden sm:inline">oz</span>
          </div>
          <div className="hidden sm:flex items-center gap-2 text-stone-400 bg-stone-800/50 px-3 py-1.5 rounded">
             <Calendar size={14} />
-            D{gameState.day}
+            D{day}
          </div>
          
          {!isMobile && (

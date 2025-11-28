@@ -1,11 +1,11 @@
 
 
 import { GameState, ProductType, ResourceType, FlowStats, GameContext } from '../../shared/types';
-import { MarketSystem } from './MarketSystem';
-import { Transaction } from '../utils/Transaction';
+import { MarketService } from '../market/MarketService';
+import { TransactionService } from '../finance/TransactionService';
 import { GAME_CONFIG } from '../../shared/config';
 
-export class ConsumerSystem {
+export class ConsumerService {
   static process(state: GameState, context: GameContext, flowStats: FlowStats): void {
     const { residents } = state.population;
     const products = state.products;
@@ -16,11 +16,10 @@ export class ConsumerSystem {
     residents.forEach(resident => {
       // 1. Receive Salary (Government Officials only here, others in LaborSystem/Production)
       if (['MAYOR', 'DEPUTY_MAYOR'].includes(resident.job)) {
-         Transaction.transfer('TREASURY', resident, resident.salary, { treasury, residents, context });
+         TransactionService.transfer('TREASURY', resident, resident.salary, { treasury, residents, context });
       }
 
       // 2. Determine Consumption Budget (Keynesian Consumption Function)
-      // C = c0 + c1 * Y
       const propensity = resident.propensityToConsume || 0.8;
       const budget = resident.cash * 0.1 * propensity; // Spend a portion of cash daily
 
@@ -55,35 +54,27 @@ export class ConsumerSystem {
       const deficit = caloriesNeeded - caloriesEaten;
       
       if (deficit > 0.1 && budget > 0) {
-          // Calculate Probability to Buy based on Elasticity
-          // Logic: Q = Q_needed * (Price / RefPrice) ^ Elasticity
-          // Here, we simulate Q via probability of placing an order since agents are individual
+          // --- ELASTICITY MODEL ---
+          // Probability P = (Price / RefPrice) ^ Elasticity
+          // If Elasticity is negative (normal good):
+          // Price > RefPrice -> P < 1 (Buy Less)
+          // Price < RefPrice -> P > 1 (Buy More/Certain)
           
-          const elasticity = GAME_CONFIG.ECONOMY.DEMAND_ELASTICITY.BREAD;
-          const refPrice = 2.0; // Reference price for Bread (Anchoring)
+          const elasticity = GAME_CONFIG.ECONOMY.DEMAND_ELASTICITY.BREAD; // e.g., -0.8
+          const refPrice = 2.0; // Anchoring price
           
-          // Demand Curve Logic
-          // If Price > RefPrice, demand shrinks based on elasticity
-          // Ratio > 1 (Price High) ^ Negative Elasticity = Ratio < 1 (Demand Down)
           const priceRatio = Math.max(0.1, breadPrice / refPrice);
-          const demandFactor = Math.pow(priceRatio, elasticity);
+          const demandProbability = Math.pow(priceRatio, elasticity);
           
-          // Residents will try to buy 'deficit' amount, scaled by demand factor
-          // But since food is a necessity, we clamp the factor. Even if expensive, they need to eat,
-          // but they might buy less surplus.
-          
-          // For survival needs (deficit), elasticity is very low (close to 0)
-          // For buying inventory buffer, elasticity is high.
-          
-          // Actual Purchase Decision
-          const willBuyBread = Math.random() < demandFactor;
+          // Residents will try to buy based on this probability
+          const willBuyBread = Math.random() < demandProbability;
 
           if (willBuyBread) {
               const affordableAmount = Math.floor(budget / breadPrice);
               const amountToBuy = Math.min(Math.ceil(deficit), affordableAmount);
               
               if (amountToBuy > 0) {
-                  MarketSystem.submitOrder(state, {
+                  MarketService.submitOrder(state, {
                       ownerId: resident.id,
                       ownerType: 'RESIDENT',
                       itemId: ProductType.BREAD,
@@ -94,10 +85,11 @@ export class ConsumerSystem {
                   }, context);
               }
           } else {
-              // Buy Grain (Inferior Substitute)
+              // Substitution Effect: Buy Grain (Inferior Substitute)
+              // Grain is inelastic necessity if Bread is too expensive
               const grainPrice = state.resources[ResourceType.GRAIN].currentPrice;
               if (budget >= grainPrice * deficit) {
-                   MarketSystem.submitOrder(state, {
+                   MarketService.submitOrder(state, {
                       ownerId: resident.id,
                       ownerType: 'RESIDENT',
                       itemId: ResourceType.GRAIN,

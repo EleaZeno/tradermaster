@@ -1,23 +1,21 @@
 
 import React, { useState } from 'react';
-import { ResourceType, ResourceItem, ProductType, ProductItem, FuturesContract, IndustryType } from '../../shared/types';
+import { ResourceItem, ProductItem, IndustryType } from '../../shared/types';
 import { RESOURCE_ICONS } from '../../shared/assets';
 import { Card } from '../../shared/components';
 import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
 import { CommodityModal } from './CommodityModal';
+import { useGameStore } from '../../shared/store/useGameStore';
+import { useShallow } from 'zustand/react/shallow';
 
-interface CommoditiesTabProps {
-  resources: Record<ResourceType, ResourceItem>;
-  products: Record<ProductType, ProductItem>;
-  cash: number;
-  futures: FuturesContract[];
-  day: number;
-  onTrade: (type: 'buy' | 'sell', itemId: IndustryType) => void;
-  onBuyFutures: (resId: ResourceType, type: 'LONG' | 'SHORT') => void;
-}
-
-export const CommoditiesTab: React.FC<CommoditiesTabProps> = ({ resources, products, cash, futures, day, onTrade, onBuyFutures }) => {
+export const CommoditiesTab: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ResourceItem | ProductItem | null>(null);
+
+  const resources = useGameStore(s => s.gameState.resources);
+  const products = useGameStore(s => s.gameState.products);
+  const cash = useGameStore(s => s.gameState.cash);
+  
+  const trade = useGameStore(s => s.trade);
 
   const renderMiniChart = (history: any[], color: string, id: string) => (
     <ResponsiveContainer width="100%" height="100%">
@@ -75,13 +73,15 @@ export const CommoditiesTab: React.FC<CommoditiesTabProps> = ({ resources, produ
                       <div className="p-2 bg-stone-800/80 backdrop-blur rounded-lg border border-stone-700 shadow-sm">{RESOURCE_ICONS[item.id]}</div>
                       <div>
                         <span className="font-bold block text-lg">{item.name}</span>
-                        <span className="text-[10px] text-stone-500 uppercase tracking-wider font-mono">Spot Market</span>
+                        <span className="text-xl font-mono text-white block font-bold mt-1">{price.toFixed(2)}</span>
                       </div>
                     </div>
                     <div className="text-right">
-                        <span className="text-xl font-mono text-white block font-bold">{price.toFixed(2)}</span>
                         <div className={`text-xs font-bold ${change >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                             {change > 0 ? '+' : ''}{change.toFixed(2)}%
+                        </div>
+                        <div className="text-[10px] text-stone-500 font-mono mt-1">
+                             Vol: {item.dailySales}
                         </div>
                     </div>
                 </div>
@@ -91,7 +91,6 @@ export const CommoditiesTab: React.FC<CommoditiesTabProps> = ({ resources, produ
                 </div>
 
                 <div className="absolute bottom-3 left-4 right-4 flex justify-between text-xs text-stone-500 font-mono z-10 pointer-events-none">
-                     <span>Vol: {item.dailySales}</span>
                      <span>Own: {item.owned || 0}</span>
                 </div>
               </Card>
@@ -105,7 +104,7 @@ export const CommoditiesTab: React.FC<CommoditiesTabProps> = ({ resources, produ
             cash={cash} 
             onClose={() => setSelectedItem(null)} 
             onTrade={(type, id) => {
-                onTrade(type, id);
+                trade(type, id);
             }}
           />
       )}

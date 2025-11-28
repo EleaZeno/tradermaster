@@ -1,20 +1,19 @@
-
 import React, { useState } from 'react';
-import { ProductType, ResourceType, ProductItem, ResourceItem, IndustryType } from '../../shared/types';
+import { ProductType, ResourceType, IndustryType } from '../../shared/types';
+import { useGameStore } from '../../shared/store/useGameStore';
 import { Card, Button } from '../../shared/components';
 import { motion } from 'framer-motion';
 
 interface CreateCompanyModalProps {
-  products: Record<ProductType, ProductItem>;
-  resources: Record<ResourceType, ResourceItem>; 
-  cash: number;
   onClose: () => void;
   onCreate: (name: string, type: IndustryType) => void;
 }
 
-export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ cash, onClose, onCreate }) => {
+export const CreateCompanyModal: React.FC<CreateCompanyModalProps> = ({ onClose, onCreate }) => {
   const [name, setName] = useState("");
   const [type, setType] = useState<string>(ResourceType.GRAIN);
+  
+  const cash = useGameStore(s => s.gameState.cash);
 
   return (
     <motion.div 

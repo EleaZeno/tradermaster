@@ -1,6 +1,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useGameStore } from '../store/useGameStore';
+import { GAME_CONFIG } from '../config';
 
 export const useGameLoop = () => {
   const isRunning = useGameStore(state => state.isRunning);
@@ -24,7 +25,12 @@ export const useGameLoop = () => {
     const animate = (time: number) => {
       if (lastTimeRef.current !== undefined) {
         const deltaTime = time - lastTimeRef.current;
-        const interval = 1000 / Math.max(1, gameSpeed);
+        
+        // Calculate interval based on CORE_ECO rate to ensure 1x speed = 1 Day / Second
+        // CORE_ECO is the number of ticks per day.
+        const ticksPerDay = GAME_CONFIG.UPDATE_RATES.CORE_ECO || 5;
+        const baseInterval = 1000 / ticksPerDay;
+        const interval = baseInterval / Math.max(1, gameSpeed);
 
         if (deltaTime >= interval) {
           tick();

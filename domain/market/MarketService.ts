@@ -1,31 +1,19 @@
 
+import { GameState, Order, OrderBook, GameContext, Trade, OrderSide, ResourceType, ProductType, OrderType } from '../../shared/types';
 
-
-import { GameState, IndustryType, ResourceType, ProductType, Order, OrderSide, OrderType, Trade, OrderBook, GameContext } from '../../shared/types';
-import { GameError } from '../../shared/utils/errorHandler';
-
-export class MarketSystem {
+export class MarketService {
   
-  /**
-   * Submits an order to the matching engine.
-   * Handles asset locking (escrow), matching, and book updates.
-   * Uses GameContext for O(1) entity lookups to reduce complexity.
-   */
   static submitOrder(
       state: GameState, 
       order: Omit<Order, 'id' | 'remainingQuantity' | 'status' | 'timestamp'>,
       context?: GameContext
   ): boolean {
-      // Robustness check: Ensure price is non-negative for LIMIT orders
       if (order.type === 'LIMIT' && order.price <= 0) {
           return false;
       }
       if (order.quantity <= 0) return false;
 
-      // 1. Validate and Lock Assets (Escrow)
-      if (!MarketSystem.lockAssets(state, order, context)) {
-          // In strict mode, we might throw here, but for now we return false
-          // throw new GameError("Insufficient funds or assets", "BUSINESS", "INSUFFICIENT_FUNDS");
+      if (!MarketService.lockAssets(state, order, context)) {
           return false;
       }
 
@@ -35,24 +23,19 @@ export class MarketSystem {
           quantity: order.quantity,
           remainingQuantity: order.quantity,
           status: 'PENDING',
-          timestamp: state.day // Use Game Day, not Date.now() for simulation consistency
+          timestamp: state.day
       };
 
-      // 2. Get or Create Order Book
       if (!state.market[order.itemId]) {
           state.market[order.itemId] = { bids: [], asks: [], lastPrice: order.price || 1.0, history: [] };
       }
       const book = state.market[order.itemId];
 
-      // 3. Match Order
-      MarketSystem.matchOrder(state, book, fullOrder, context);
+      MarketService.matchOrder(state, book, fullOrder, context);
 
       return true;
   }
 
-  /**
-   * Cancels an order and refunds locked assets.
-   */
   static cancelOrder(state: GameState, orderId: string, itemId: string, context?: GameContext): void {
       const book = state.market[itemId];
       if (!book) return;
@@ -60,7 +43,7 @@ export class MarketSystem {
       const bidIndex = book.bids.findIndex(o => o.id === orderId);
       if (bidIndex !== -1) {
           const order = book.bids[bidIndex];
-          MarketSystem.refundAssets(state, order, order.remainingQuantity, context);
+          MarketService.refundAssets(state, order, order.remainingQuantity, context);
           order.status = 'CANCELLED';
           book.bids.splice(bidIndex, 1);
           return;
@@ -69,38 +52,32 @@ export class MarketSystem {
       const askIndex = book.asks.findIndex(o => o.id === orderId);
       if (askIndex !== -1) {
           const order = book.asks[askIndex];
-          MarketSystem.refundAssets(state, order, order.remainingQuantity, context);
+          MarketService.refundAssets(state, order, order.remainingQuantity, context);
           order.status = 'CANCELLED';
           book.asks.splice(askIndex, 1);
           return;
       }
   }
 
-  /**
-   * Prunes orders that are too old (Time To Live).
-   * This forces agents to re-evaluate prices and prevents the book from getting stale.
-   */
   static pruneStaleOrders(state: GameState, context: GameContext): void {
-      const TTL = 3; // Orders expire after 3 days
+      const TTL = 3; 
       
       Object.keys(state.market).forEach(itemId => {
           const book = state.market[itemId];
           
-          // Filter Bids
           for (let i = book.bids.length - 1; i >= 0; i--) {
               if (state.day - book.bids[i].timestamp > TTL) {
                   const order = book.bids[i];
-                  MarketSystem.refundAssets(state, order, order.remainingQuantity, context);
+                  MarketService.refundAssets(state, order, order.remainingQuantity, context);
                   order.status = 'CANCELLED';
                   book.bids.splice(i, 1);
               }
           }
 
-          // Filter Asks
           for (let i = book.asks.length - 1; i >= 0; i--) {
               if (state.day - book.asks[i].timestamp > TTL) {
                   const order = book.asks[i];
-                  MarketSystem.refundAssets(state, order, order.remainingQuantity, context);
+                  MarketService.refundAssets(state, order, order.remainingQuantity, context);
                   order.status = 'CANCELLED';
                   book.asks.splice(i, 1);
               }
@@ -109,31 +86,25 @@ export class MarketSystem {
   }
 
   private static lockAssets(state: GameState, order: Omit<Order, 'id' | 'remainingQuantity' | 'status' | 'timestamp'>, context?: GameContext): boolean {
-      const totalCost = order.price * order.quantity; // For Limit Buy
+      const totalCost = order.price * order.quantity; 
       
       let costToLock = 0;
       let itemToLock = 0;
 
       if (order.side === 'BUY') {
-          // BUY: Lock Cash
           if (order.type === 'LIMIT') {
               costToLock = order.price * order.quantity;
           } else {
-             // Market Buy: Lock based on best ask or estimation
              const book = state.market[order.itemId];
-             // If book empty, market order fails immediately to prevent locking infinite cash
              if (!book || book.asks.length === 0) return false;
              
-             // Estimate cost (take worst case of top 5 orders to be safe, or just top 1)
              const bestAsk = book.asks[0].price;
-             costToLock = bestAsk * order.quantity * 1.5; // 50% buffer for slippage
+             costToLock = bestAsk * order.quantity * 1.5; 
           }
       } else {
-          // SELL: Lock Inventory
           itemToLock = order.quantity;
       }
 
-      // Perform Locking - Using Context for O(1) Lookup
       if (order.ownerType === 'RESIDENT') {
           const resident = context?.residentMap.get(order.ownerId) || state.population.residents.find(r => r.id === order.ownerId);
           if (!resident) return false;
@@ -143,16 +114,10 @@ export class MarketSystem {
               resident.cash -= costToLock;
           } else {
               if (order.itemId.startsWith('comp_')) {
-                   // SHORT SELLING LOGIC:
-                   // If player is selling and doesn't have enough shares, allow negative (Short)
-                   // But require some cash margin (simplification: no hard margin lock, but must have positive cash)
                    const currentShares = resident.portfolio[order.itemId] || 0;
-                   
                    if (resident.isPlayer) {
-                       // Player can short
                        resident.portfolio[order.itemId] = currentShares - itemToLock;
                    } else {
-                       // AI Residents cannot short (prevent bankruptcy loops)
                        if (currentShares < itemToLock) return false;
                        resident.portfolio[order.itemId] = currentShares - itemToLock;
                    }
@@ -216,35 +181,29 @@ export class MarketSystem {
       }
   }
 
-  /**
-   * Refactored matchOrder: now splits concerns into clearer sub-methods.
-   */
   private static matchOrder(state: GameState, book: OrderBook, takerOrder: Order, context?: GameContext): void {
       const isBuy = takerOrder.side === 'BUY';
       const opposingBook = isBuy ? book.asks : book.bids;
       
       let matchedCount = 0;
 
-      // Iteratively match against opposing orders
       for (let i = 0; i < opposingBook.length && takerOrder.remainingQuantity > 0.0001; i++) {
           const makerOrder = opposingBook[i];
           
-          if (!MarketSystem.canMatch(takerOrder, makerOrder)) break;
+          if (!MarketService.canMatch(takerOrder, makerOrder)) break;
 
-          MarketSystem.executeMatch(state, book, takerOrder, makerOrder, context);
+          MarketService.executeMatch(state, book, takerOrder, makerOrder, context);
 
           if (makerOrder.remainingQuantity < 0.0001) {
               matchedCount++;
           }
       }
 
-      // Batch remove filled orders
       if (matchedCount > 0) {
           opposingBook.splice(0, matchedCount);
       }
 
-      // Handle any remainder of the taker order
-      MarketSystem.handleOrderRemainder(state, book, takerOrder, context);
+      MarketService.handleOrderRemainder(state, book, takerOrder, context);
   }
 
   private static canMatch(taker: Order, maker: Order): boolean {
@@ -252,31 +211,25 @@ export class MarketSystem {
           if (taker.side === 'BUY') return maker.price <= taker.price;
           else return maker.price >= taker.price;
       }
-      return true; // Market order matches best available
+      return true;
   }
 
   private static executeMatch(state: GameState, book: OrderBook, taker: Order, maker: Order, context?: GameContext): void {
       const matchPrice = maker.price; 
       const matchQty = Math.min(taker.remainingQuantity, maker.remainingQuantity);
 
-      // 1. Execute Trade Transfer (Exchange assets/cash)
-      MarketSystem.executeTradeTransfer(state, taker, maker, matchPrice, matchQty, context);
+      MarketService.executeTradeTransfer(state, taker, maker, matchPrice, matchQty, context);
 
-      // 2. Update Maker Status
       maker.remainingQuantity -= matchQty;
       maker.status = maker.remainingQuantity < 0.0001 ? 'EXECUTED' : 'PARTIALLY_EXECUTED';
 
-      // 3. Update Taker Status (Partial)
       taker.remainingQuantity -= matchQty;
 
-      // 4. Record History
-      MarketSystem.recordTrade(state, book, taker, maker, matchPrice, matchQty);
+      MarketService.recordTrade(state, book, taker, maker, matchPrice, matchQty);
 
-      // 5. Update Candles
-      MarketSystem.updateCandle(state, taker.itemId, matchPrice, matchQty, context);
+      MarketService.updateCandle(state, taker.itemId, matchPrice, matchQty, context);
 
-      // 6. Apply Transaction Tax
-      MarketSystem.applyTradeTax(state, taker, maker, matchPrice, matchQty, context);
+      MarketService.applyTradeTax(state, taker, maker, matchPrice, matchQty, context);
   }
 
   private static recordTrade(state: GameState, book: OrderBook, taker: Order, maker: Order, price: number, qty: number) {
@@ -294,15 +247,14 @@ export class MarketSystem {
   }
 
   private static applyTradeTax(state: GameState, taker: Order, maker: Order, price: number, qty: number, context?: GameContext) {
-      if (orderIsTreasury(taker) || orderIsTreasury(maker)) return;
+      if (taker.ownerType === 'TREASURY' || maker.ownerType === 'TREASURY') return;
       
       const isBuy = taker.side === 'BUY';
-      // Seller pays the tax
       const sellerId = isBuy ? maker.ownerId : taker.ownerId;
       const sellerType = isBuy ? maker.ownerType : taker.ownerType;
       
       const tax = (price * qty) * state.cityTreasury.taxPolicy.consumptionTaxRate;
-      MarketSystem.deductTax(state, sellerId, sellerType, tax, context);
+      MarketService.deductTax(state, sellerId, sellerType, tax, context);
   }
 
   private static handleOrderRemainder(state: GameState, book: OrderBook, taker: Order, context?: GameContext): void {
@@ -312,26 +264,22 @@ export class MarketSystem {
       }
 
       if (taker.type === 'LIMIT') {
-          // Add remainder to book
           taker.status = taker.remainingQuantity < taker.quantity ? 'PARTIALLY_EXECUTED' : 'PENDING';
           const isBuy = taker.side === 'BUY';
           const bookSide = isBuy ? book.bids : book.asks;
-          const insertIndex = MarketSystem.getSortedIndex(bookSide, taker.price, isBuy);
+          const insertIndex = MarketService.getSortedIndex(bookSide, taker.price, isBuy);
           bookSide.splice(insertIndex, 0, taker);
       } else {
-          // Market Order Remainder Handling (Refund/Cancel)
           if (taker.side === 'BUY') {
-               // Refund unused estimated locked cash
                const book = state.market[taker.itemId];
                const bestAsk = book?.asks[0]?.price || taker.price || 1.0; 
                const refundCash = bestAsk * taker.remainingQuantity * 1.5; 
                const r = context?.residentMap.get(taker.ownerId) || state.population.residents.find(x => x.id === taker.ownerId);
                if (r) r.cash += refundCash;
           } else {
-              // Sell Market Order Remainder: Refund items
-              MarketSystem.refundAssets(state, taker, taker.remainingQuantity, context);
+              MarketService.refundAssets(state, taker, taker.remainingQuantity, context);
           }
-          taker.status = 'EXECUTED'; // Remainder is cancelled
+          taker.status = 'EXECUTED'; 
       }
   }
 
@@ -353,19 +301,16 @@ export class MarketSystem {
   }
 
   private static executeTradeTransfer(state: GameState, taker: Order, maker: Order, price: number, qty: number, context?: GameContext): void {
-      // 1. Identify Buyer and Seller Objects (O(1) with Context)
       const buyerType = taker.side === 'BUY' ? taker.ownerType : maker.ownerType;
       const buyerId = taker.side === 'BUY' ? taker.ownerId : maker.ownerId;
       
       const sellerType = taker.side === 'SELL' ? taker.ownerType : maker.ownerType;
       const sellerId = taker.side === 'SELL' ? taker.ownerId : maker.ownerId;
 
-      // 2. Transfer Item to Buyer (Item already deducted from Seller during Lock)
       if (buyerType === 'RESIDENT') {
           const r = context?.residentMap.get(buyerId) || state.population.residents.find(x => x.id === buyerId);
           if (r) {
               if (taker.itemId.startsWith('comp_')) {
-                  // If covering a short position, this increases portfolio from negative towards zero
                   r.portfolio[taker.itemId] = (r.portfolio[taker.itemId] || 0) + qty;
               } else {
                   r.inventory[taker.itemId] = (r.inventory[taker.itemId] || 0) + qty;
@@ -376,7 +321,6 @@ export class MarketSystem {
           if (c) c.inventory.finished[taker.itemId] = (c.inventory.finished[taker.itemId] || 0) + qty; 
       }
 
-      // 3. Transfer Cash to Seller (Cash already deducted from Buyer during Lock)
       const cost = price * qty;
       
       if (sellerType === 'RESIDENT') {
@@ -394,15 +338,12 @@ export class MarketSystem {
           state.cityTreasury.cash += cost;
       }
 
-      // 4. Refund Excess Cash to Taker Buyer (Price Improvement for Limit Buy)
       if (taker.side === 'BUY' && taker.type === 'LIMIT' && taker.price > price) {
            const excess = (taker.price - price) * qty;
            const r = context?.residentMap.get(taker.ownerId) || state.population.residents.find(x => x.id === taker.ownerId);
            if (r) r.cash += excess;
       }
 
-      // 5. Notifications
-      // Respect settings and localization
       if (state.settings.notifications.trades) {
           const isEn = state.settings.language === 'en';
           
@@ -493,8 +434,4 @@ export class MarketSystem {
         }
       }
   }
-}
-
-function orderIsTreasury(o: Order) {
-    return o.ownerType === 'TREASURY';
 }
