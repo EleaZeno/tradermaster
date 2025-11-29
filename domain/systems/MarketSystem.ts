@@ -1,6 +1,4 @@
 
-
-
 import { GameState, IndustryType, ResourceType, ProductType, Order, OrderSide, OrderType, Trade, OrderBook, GameContext } from '../../shared/types';
 import { GameError } from '../../shared/utils/errorHandler';
 
@@ -40,11 +38,24 @@ export class MarketSystem {
 
       // 2. Get or Create Order Book
       if (!state.market[order.itemId]) {
-          state.market[order.itemId] = { bids: [], asks: [], lastPrice: order.price || 1.0, history: [] };
+          state.market[order.itemId] = { bids: [], asks: [], lastPrice: order.price || 1.0, history: [], volatility: 0, spread: 0 };
       }
       const book = state.market[order.itemId];
 
-      // 3. Match Order
+      // 3. Insert and Sort (Price/Time Priority)
+      const isBuy = fullOrder.side === 'BUY';
+      const bookSide = isBuy ? book.bids : book.asks;
+      
+      bookSide.push(fullOrder);
+      
+      // Bids: Descending (Highest Price First), Asks: Ascending (Lowest Price First)
+      if (isBuy) {
+          bookSide.sort((a, b) => b.price - a.price || a.timestamp - b.timestamp);
+      } else {
+          bookSide.sort((a, b) => a.price - b.price || a.timestamp - b.timestamp);
+      }
+
+      // 4. Match Order
       MarketSystem.matchOrder(state, book, fullOrder, context);
 
       return true;
@@ -312,12 +323,9 @@ export class MarketSystem {
       }
 
       if (taker.type === 'LIMIT') {
-          // Add remainder to book
+          // Add remainder to book - ALREADY ADDED in submitOrder step 3
           taker.status = taker.remainingQuantity < taker.quantity ? 'PARTIALLY_EXECUTED' : 'PENDING';
-          const isBuy = taker.side === 'BUY';
-          const bookSide = isBuy ? book.bids : book.asks;
-          const insertIndex = MarketSystem.getSortedIndex(bookSide, taker.price, isBuy);
-          bookSide.splice(insertIndex, 0, taker);
+          // No need to re-insert or sort, it is already in the array reference passed as `takerOrder`
       } else {
           // Market Order Remainder Handling (Refund/Cancel)
           if (taker.side === 'BUY') {
@@ -332,24 +340,12 @@ export class MarketSystem {
               MarketSystem.refundAssets(state, taker, taker.remainingQuantity, context);
           }
           taker.status = 'EXECUTED'; // Remainder is cancelled
+          
+          // Remove from book (it was added tentatively)
+          const side = taker.side === 'BUY' ? book.bids : book.asks;
+          const idx = side.indexOf(taker);
+          if (idx !== -1) side.splice(idx, 1);
       }
-  }
-
-  private static getSortedIndex(array: Order[], price: number, isDesc: boolean): number {
-    let low = 0;
-    let high = array.length;
-    while (low < high) {
-        const mid = (low + high) >>> 1;
-        const itemPrice = array[mid].price;
-        const goRight = isDesc ? itemPrice >= price : itemPrice <= price;
-
-        if (goRight) {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-    return low;
   }
 
   private static executeTradeTransfer(state: GameState, taker: Order, maker: Order, price: number, qty: number, context?: GameContext): void {
@@ -414,19 +410,6 @@ export class MarketSystem {
                 
               state.notifications.push({
                   id: `ntf_${Date.now()}`,
-                  message: msg,
-                  type: 'success',
-                  timestamp: Date.now()
-              });
-          }
-          if (maker.ownerType === 'RESIDENT' && maker.ownerId === 'res_player') {
-               const action = maker.side === 'BUY' ? (isEn ? 'Bought' : '买入') : (isEn ? 'Sold' : '卖出');
-               const msg = isEn
-                ? `Order Filled: ${action} ${qty.toFixed(0)} ${maker.itemId} @ ${price.toFixed(2)}`
-                : `订单成交: ${action} ${qty.toFixed(0)} ${maker.itemId} @ ${price.toFixed(2)}`;
-
-               state.notifications.push({
-                  id: `ntf_${Date.now()}_m`,
                   message: msg,
                   type: 'success',
                   timestamp: Date.now()

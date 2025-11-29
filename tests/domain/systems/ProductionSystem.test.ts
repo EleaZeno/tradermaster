@@ -1,4 +1,6 @@
 
+
+
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ProductionSystem } from '../../../domain/systems/ProductionSystem';
 import { GameState, ResourceType, ProductType, FlowStats, OrderBook, GameContext, BusinessCyclePhase, MayorPersonality } from '../../../shared/types';
@@ -6,7 +8,7 @@ import { INITIAL_POPULATION, INITIAL_COMPANIES, INITIAL_RESOURCES, INITIAL_PRODU
 
 // Helper to create empty books
 const createEmptyBook = (price: number): OrderBook => ({
-    bids: [], asks: [], lastPrice: price, history: []
+    bids: [], asks: [], lastPrice: price, history: [], volatility: 0, spread: 0
 });
 
 const createMockState = (): GameState => ({

@@ -2,7 +2,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Bot, Send, X, Loader2 } from 'lucide-react';
 import { ChatMessage } from '../shared/types';
-import { getFinancialAdvisorResponseStream } from '../infrastructure/ai/GeminiAdapter';
+import { aiService } from '../infrastructure/ai/GeminiAdapter';
 import { useGameStore } from '../shared/store/useGameStore';
 import { useGodModeData } from '../shared/hooks/useGodModeData';
 import DOMPurify from 'dompurify';
@@ -41,7 +41,7 @@ export const ChatWidget: React.FC = () => {
     setIsStreaming(true);
     setStreamingContent("");
 
-    await getFinancialAdvisorResponseStream(
+    await aiService.getFinancialAdvisorResponseStream(
         sanitizedInput,
         gameState,
         godModeData,

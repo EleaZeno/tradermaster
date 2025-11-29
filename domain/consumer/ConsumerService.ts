@@ -1,4 +1,5 @@
 
+
 import { GameState, ProductType, ResourceType, FlowStats, GameContext, GDPFlowAccumulator, Resident } from '../../shared/types';
 import { MarketService } from '../market/MarketService';
 import { TransactionService } from '../finance/TransactionService';
@@ -14,36 +15,38 @@ export class ConsumerService {
     const breadPrice = products[ProductType.BREAD].marketPrice;
     const grainPrice = resources[ResourceType.GRAIN].currentPrice;
 
-    // --- MACRO: Inflation Expectations (Adaptive) ---
-    // \pi^e_t = \pi_{t-1} + \lambda (\pi_{t-1} - \pi_{t-2})
+    // --- MACRO: Inflation Expectations & Unemployment Risk ---
     const history = state.macroHistory;
     let expectedInflation = 0;
+    let unemploymentRisk = 0.05; // Default 5%
+
     if (history.length > 1) {
-        const last = history[history.length - 1].inflation;
-        const prev = history[history.length - 2].inflation;
-        expectedInflation = last + 0.5 * (last - prev);
+        const last = history[history.length - 1];
+        const prev = history[history.length - 2];
+        expectedInflation = last.inflation + 0.5 * (last.inflation - prev.inflation);
+        unemploymentRisk = last.unemployment;
     }
 
     residents.forEach(resident => {
-      // 1. Receive Government Salaries (if applicable)
       if (['MAYOR', 'DEPUTY_MAYOR'].includes(resident.job)) {
          TransactionService.transfer('TREASURY', resident, resident.salary, { treasury, residents, context });
          gdpFlow.G += resident.salary; 
       }
 
-      // 2. Budget Determination with Expectations
-      // Dynamic MPC: If expecting inflation, consume more now (Intertemporal Substitution)
+      // 2. Budget Determination: Precautionary Savings Model
+      // MPC = Base + k1*InflationExp - k2*UnemploymentRisk*RiskAversion
       let baseMPC = resident.propensityToConsume || 0.8;
-      const adjustedMPC = Math.max(0.5, Math.min(0.99, baseMPC + (expectedInflation * 2.0)));
+      const riskAversion = resident.riskAversion || 1.0;
+      
+      const inflationTerm = expectedInflation * 1.5; // Intertemporal substitution
+      const riskTerm = unemploymentRisk * riskAversion * 2.0; // Precautionary saving
+      
+      const adjustedMPC = Math.max(0.2, Math.min(0.99, baseMPC + inflationTerm - riskTerm));
       
       const nominalBudget = resident.cash * adjustedMPC;
 
-      // 3. Stone-Geary Utility Maximization
-      // U = \prod (q_i - \gamma_i)^\alpha_i
-      // Step A: Subsistence Layer (\gamma)
+      // 3. Stone-Geary Utility
       const survivalNeed = GAME_CONFIG.DAILY_GRAIN_NEED;
-      
-      // Calculate cost of subsistence bundle (Cheapest Calorie)
       const costViaGrain = survivalNeed * grainPrice;
       const costViaBread = (survivalNeed * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO) * breadPrice;
       const isBreadCheaper = costViaBread < costViaGrain;
@@ -55,22 +58,18 @@ export class ConsumerService {
       let qGrain = 0;
 
       if (discretionaryIncome < 0) {
-          // SURVIVAL MODE: Budget < Subsistence
-          // Ignore preferences, spend accumulated Savings (Cash) to stay alive
+          // SURVIVAL MODE
           const emergencyBudget = resident.cash; 
-          
           if (isBreadCheaper) {
               qBread = emergencyBudget / Math.max(0.1, breadPrice);
           } else {
               qGrain = emergencyBudget / Math.max(0.1, grainPrice);
           }
       } else {
-          // COMFORT MODE: Discretionary Spending
-          // 1. Buy Subsistence
+          // COMFORT MODE
           if (isBreadCheaper) qBread += (survivalNeed * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO);
           else qGrain += survivalNeed;
 
-          // 2. Allocate Discretionary via Cobb-Douglas Weights
           if (!resident.preferenceWeights) {
               resident.preferenceWeights = { 
                   [ProductType.BREAD]: 0.6, 
@@ -90,7 +89,6 @@ export class ConsumerService {
           qGrain += spendGrain / Math.max(0.1, grainPrice);
       }
 
-      // 4. Submit Orders (Integer constraints for items usually, but we allow fractional for simulation smoothness)
       qBread = Math.floor(qBread);
       qGrain = Math.floor(qGrain);
 
@@ -120,7 +118,6 @@ export class ConsumerService {
           gdpFlow.C += (qGrain * grainPrice);
       }
 
-      // 5. Physical Consumption
       ConsumerService.consumeFood(resident, flowStats, state);
     });
   }
@@ -135,7 +132,7 @@ export class ConsumerService {
       const breadToEat = Math.min(breadInv, caloriesNeeded / GAME_CONFIG.BREAD_SUBSTITUTE_RATIO);
       if (breadToEat > 0) {
           resident.inventory.BREAD = breadInv - breadToEat;
-          caloriesEaten += breadToEat * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO; // 1 Bread = More Calories? Or efficiency ratio
+          caloriesEaten += breadToEat * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO;
           flowStats[ProductType.BREAD].consumed += breadToEat;
       }
 

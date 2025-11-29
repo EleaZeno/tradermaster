@@ -1,4 +1,5 @@
 
+
 import { GameState, Order, OrderBook, GameContext, Trade, ResourceType, ProductType, OrderType, OrderSide } from '../../shared/types';
 
 const MAX_MATCH_DEPTH = 50; // Prevent infinite loops or UI freeze on huge orders
@@ -36,7 +37,7 @@ export class MarketService {
 
       // 3. Initialize Book if needed
       if (!state.market[order.itemId]) {
-          state.market[order.itemId] = { bids: [], asks: [], lastPrice: order.price || 1.0, history: [] };
+          state.market[order.itemId] = { bids: [], asks: [], lastPrice: order.price || 1.0, history: [], volatility: 0, spread: 0 };
       }
       const book = state.market[order.itemId];
 
@@ -54,6 +55,9 @@ export class MarketService {
       } else {
           bookSide.sort((a, b) => a.price - b.price || a.timestamp - b.timestamp);
       }
+
+      // Update Market Metrics (Microstructure)
+      MarketService.updateBookMetrics(book);
 
       // 6. Try to Match immediately
       MarketService.matchOrder(state, book, fullOrder, context);
@@ -80,6 +84,8 @@ export class MarketService {
       if (!findAndCancel(book.bids)) {
           findAndCancel(book.asks);
       }
+      
+      MarketService.updateBookMetrics(book);
   }
 
   static pruneStaleOrders(state: GameState, context: GameContext): void {
@@ -87,6 +93,7 @@ export class MarketService {
       
       Object.keys(state.market).forEach(itemId => {
           const book = state.market[itemId];
+          let changed = false;
           
           const prune = (side: Order[]) => {
               for (let i = side.length - 1; i >= 0; i--) {
@@ -95,13 +102,30 @@ export class MarketService {
                       MarketService.AssetLocker.refund(state, order, order.remainingQuantity, context);
                       order.status = 'CANCELLED';
                       side.splice(i, 1);
+                      changed = true;
                   }
               }
           };
 
           prune(book.bids);
           prune(book.asks);
+          
+          if (changed) MarketService.updateBookMetrics(book);
       });
+  }
+
+  private static updateBookMetrics(book: OrderBook) {
+      if (book.bids.length > 0 && book.asks.length > 0) {
+          const bestBid = book.bids[0].price;
+          const bestAsk = book.asks[0].price;
+          book.spread = bestAsk - bestBid;
+          // Volatility proxy: Spread / MidPrice + Recent History Variance (simplified here as Spread %)
+          const midPrice = (bestAsk + bestBid) / 2;
+          book.volatility = midPrice > 0 ? (book.spread / midPrice) : 0;
+      } else {
+          book.spread = 0;
+          book.volatility = 0;
+      }
   }
 
   // --- Matching Engine ---
@@ -159,6 +183,7 @@ export class MarketService {
       }
 
       MarketService.handleOrderRemainder(state, book, triggerOrder, context);
+      MarketService.updateBookMetrics(book); // Re-calc metrics after match
   }
 
   private static canMatch(taker: Order, maker: Order): boolean {
@@ -182,9 +207,6 @@ export class MarketService {
           }
       } else {
           // Market Order Remainder: Cancel and Refund
-          // Market orders are Fill-or-Kill / Immediate-or-Cancel usually, 
-          // but here we treat remaining as Cancel to avoid sticking in book with no price.
-          
           MarketService.AssetLocker.refundRemainder(state, taker, context);
           
           taker.status = 'EXECUTED'; // Effectively cancelled
@@ -314,19 +336,10 @@ export class MarketService {
       static refund(state: GameState, order: Order, amount: number, context?: GameContext): void {
           if (amount <= 0.0001) return;
           
-          // NOTE: We don't track original lock price for Market orders easily here without extra state.
-          // For Limit orders, we refund price * quantity.
-          // For Market orders, we approximate refund based on lastPrice or current logic.
-          
           if (order.side === 'BUY') {
               if (order.type === 'LIMIT') {
                   this.creditCash(state, order.ownerId, order.ownerType, order.price * amount, context);
               } else {
-                  // Fallback for Market Buy refund (if cancelled manually)
-                  // Assuming locked at some safety margin, but we don't know it exactly.
-                  // We use current market price as best effort approximation for refund value,
-                  // or better, if we had "frozenAmt" on order. 
-                  // Since we don't, this is a limitation. We use lastPrice * 1.2 used in lock.
                   const book = state.market[order.itemId];
                   const price = book ? book.lastPrice : 1.0;
                   this.creditCash(state, order.ownerId, order.ownerType, price * 1.2 * amount, context);
@@ -340,9 +353,6 @@ export class MarketService {
           // Special handling for Market Order remainders
           if (order.side === 'BUY') {
                const book = state.market[order.itemId];
-               // We locked 1.2x bestAsk. We should refund the unused portion.
-               // Since we can't track exactly what was locked vs spent per order in this simplified model,
-               // we refund the remainder quantity * (lockPrice estimate).
                const estimatedLockPrice = (book?.lastPrice || 1.0) * 1.2;
                const refundCash = estimatedLockPrice * order.remainingQuantity;
                this.creditCash(state, order.ownerId, order.ownerType, refundCash, context);
@@ -430,8 +440,6 @@ export class MarketService {
                   const currentShares = r.portfolio[itemId] || 0;
                   if (r.isPlayer) {
                       // Player can Short (Negative Balance allowed conceptually, but here we just decrement)
-                      // Logic: If Player, we assume logic is handled via margin check elsewhere or we allow it.
-                      // For simplicity here, we allow negative portfolio.
                       r.portfolio[itemId] = currentShares - qty;
                       return true;
                   } else {

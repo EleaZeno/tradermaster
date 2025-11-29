@@ -1,21 +1,20 @@
 
-
 import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType, FlowStats, GameContext } from '../../shared/types';
 import { Transaction } from '../utils/Transaction';
+import { safeDivide } from '../../shared/utils/math';
 
 export class FinancialSystem {
-  static updateStockPrices(state: GameState): void {
+  static processStockMarket(state: GameState): void {
       state.companies.forEach(comp => {
         if (comp.isBankrupt) {
           comp.sharePrice = Math.max(0.01, comp.sharePrice * 0.95);
           return;
         }
 
-        const eps = comp.lastProfit / comp.totalShares;
+        const eps = safeDivide(comp.lastProfit, comp.totalShares);
+        const bookValue = safeDivide(comp.cash, comp.totalShares);
         
-        // Use PE ratio (simplified)
         let targetPrice = 0;
-        const bookValue = comp.cash / comp.totalShares; 
         
         if (eps > 0) {
             targetPrice = eps * 15;
@@ -42,17 +41,11 @@ export class FinancialSystem {
       });
   }
 
-  static processStockMarket(state: GameState): void {
-      this.updateStockPrices(state);
-  }
-
   static runAudit(state: GameState, flowStats: FlowStats): void {
     const audit: EconomicSnapshot['inventoryAudit'] = {};
     
-    // Check Market Inventory via Order Book (Sell Side)
     const getMarketSupply = (itemId: string) => {
         const book = state.market[itemId];
-        // Fix: Use remainingQuantity as per Order type definition
         return book ? book.asks.reduce((s, o) => s + (o.remainingQuantity), 0) : 0;
     };
 
@@ -74,36 +67,25 @@ export class FinancialSystem {
             spoiled: flowStats[type].spoiled
         };
         
-        // Estimate values
         const price = type === ResourceType.GRAIN ? state.resources[ResourceType.GRAIN].currentPrice : state.products[ProductType.BREAD].marketPrice;
         totalConsumptionValue += flowStats[type].consumed * price;
         totalProductionValue += flowStats[type].produced * price;
     });
 
-    // --- MACRO STATISTICS & STYLIZED FACTS TRACKING ---
     const unemployedCount = state.population.residents.filter(r => r.job === 'UNEMPLOYED' || (r.job === 'FARMER' && !r.employerId)).length;
     const laborForce = state.population.total;
-    const unemploymentRate = unemployedCount / laborForce;
+    const unemploymentRate = safeDivide(unemployedCount, laborForce);
 
-    // CPI Calculation (Simple basket: 1 Grain + 1 Bread)
     const grainPrice = state.resources[ResourceType.GRAIN].currentPrice;
     const breadPrice = state.products[ProductType.BREAD].marketPrice;
-    const cpi = (grainPrice * 0.4) + (breadPrice * 0.6); // Weighting
+    const cpi = (grainPrice * 0.4) + (breadPrice * 0.6); 
 
-    // Inflation
     const prevCpi = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].cpi : cpi;
-    const inflation = prevCpi > 0 ? (cpi - prevCpi) / prevCpi : 0;
+    const inflation = safeDivide(cpi - prevCpi, prevCpi);
 
-    // GDP Approximation (Expenditure Approach: C + I + G)
-    // C = totalConsumptionValue
-    // I = Investment (Construction of lines + Inventory Change) -> Simplification: Just production value for now or corporate cash change
-    // G = Government Spending
     const govSpending = state.cityTreasury.dailyExpense;
-    
-    // Rough Nominal GDP
-    const gdp = totalConsumptionValue + govSpending + (totalProductionValue - totalConsumptionValue); // Basic Value Added approx
+    const gdp = totalConsumptionValue + govSpending + (totalProductionValue - totalConsumptionValue);
 
-    // Calculate Money Supply (M0)
     const M0 = state.economicOverview.totalResidentCash + state.economicOverview.totalCorporateCash + state.economicOverview.totalCityCash + state.economicOverview.totalFundCash;
 
     state.macroHistory.push({
@@ -122,56 +104,37 @@ export class FinancialSystem {
     });
 
     if (state.macroHistory.length > 365) state.macroHistory.shift();
-    // ------------------------------------------------
 
     state.economicOverview = {
         totalResidentCash: state.population.residents.reduce((s, r) => s + r.cash, 0),
         totalCorporateCash: state.companies.reduce((s, c) => s + c.cash, 0),
         totalFundCash: state.funds.reduce((s, f) => s + f.cash, 0),
         totalCityCash: state.cityTreasury.cash,
-        totalSystemGold: 0, 
+        totalSystemGold: M0, 
         totalInventoryValue: 0, totalMarketCap: 0, totalFuturesNotional: 0,
         inventoryAudit: audit
     };
-    state.economicOverview.totalSystemGold = state.economicOverview.totalResidentCash + state.economicOverview.totalCorporateCash + state.economicOverview.totalCityCash + state.economicOverview.totalFundCash;
   }
 
   static manageFiscalPolicy(state: GameState, context: GameContext): void {
       const treasury = state.cityTreasury;
       const M0 = state.economicOverview.totalSystemGold || 1000;
-      
-      const hoardingRatio = treasury.cash / M0;
+      const hoardingRatio = safeDivide(treasury.cash, M0);
       
       let status: 'AUSTERITY' | 'NEUTRAL' | 'STIMULUS' = 'NEUTRAL';
       let actionLog = "";
 
-      // Optimization: Lookup deputy via context map if possible
       const deputy = context.residentsByJob['DEPUTY_MAYOR']?.[0];
       
-      let welfareBudget = 0;
-      if (deputy) {
-          if (treasury.cash > 200) {
-              welfareBudget = state.population.total * 1.5; 
-              actionLog += `副市长批准扩大救济 (${welfareBudget.toFixed(0)}份); `;
-          } else {
-              welfareBudget = 10; 
-              actionLog += `副市长削减福利; `;
-          }
-      } else {
-          welfareBudget = 30; 
-      }
-      
+      let welfareBudget = deputy ? (treasury.cash > 200 ? 45 : 15) : 30;
       treasury.taxPolicy.grainSubsidy = welfareBudget;
 
-      // SAFETY NET: Quantitative Easing (QE) if velocity is dead
-      // If GDP is near zero but Money Supply exists, it means liquidity trap.
-      // Print money and give it to poor people.
       const lastGdp = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].gdp : 100;
       if (lastGdp < 10) {
           status = 'STIMULUS';
           const bailout = 1000;
           treasury.cash += bailout;
-          state.economicOverview.totalSystemGold += bailout; // Magic money printing
+          state.economicOverview.totalSystemGold += bailout; 
           
           const poor = state.population.residents.filter(r => r.cash < 5);
           if (poor.length > 0) {
@@ -179,9 +142,8 @@ export class FinancialSystem {
               poor.forEach(r => {
                   Transaction.transfer('TREASURY', r, amount, { treasury, residents: state.population.residents, context });
               });
-              actionLog += `【紧急】经济停摆，央行直升机撒钱 (${Math.floor(amount)} oz/人); `;
+              actionLog += `【紧急】经济停摆，央行直升机撒钱; `;
           } else {
-               // Give to companies if residents have money but no production
                state.companies.forEach(c => c.cash += 200);
                actionLog += `【紧急】企业纾困注资; `;
           }

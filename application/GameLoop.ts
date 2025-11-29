@@ -1,4 +1,6 @@
 
+
+
 import { GameState, ResourceType, ProductType, FlowStats, GameContext, GDPFlowAccumulator } from '../shared/types';
 import { GameContextFactory } from '../shared/utils/GameContextFactory';
 import { LaborService } from '../domain/labor/LaborService';
@@ -15,6 +17,7 @@ import { GDPService } from '../domain/macro/GDPService';
 import { FiscalService } from '../domain/macro/FiscalService';
 import { BusinessCycleService } from '../domain/macro/BusinessCycleService';
 import { HealthCheckService } from '../domain/analytics/HealthCheckService';
+import { SanityCheckSystem } from '../domain/analytics/SanityCheckSystem';
 import { GAME_CONFIG } from '../shared/config';
 
 // --- Profiling Helper ---
@@ -67,6 +70,9 @@ const runDailyPipeline = (state: GameState, context: GameContext) => {
     state.day += 1;
 
     measure('eco-accounting', () => GDPService.process(state, flowStats, gdpFlow));
+    
+    // Final Safety Check
+    measure('eco-sanity', () => SanityCheckSystem.check(state));
 };
 
 const runMacroPipeline = (state: GameState, context: GameContext) => {

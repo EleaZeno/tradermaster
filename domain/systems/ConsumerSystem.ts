@@ -1,9 +1,8 @@
 
-
 import { GameState, ProductType, ResourceType, FlowStats, GameContext } from '../../shared/types';
 import { MarketSystem } from './MarketSystem';
 import { Transaction } from '../utils/Transaction';
-import { GAME_CONFIG } from '../../shared/config';
+import { ECO_CONSTANTS } from '../../shared/config';
 
 export class ConsumerSystem {
   static process(state: GameState, context: GameContext, flowStats: FlowStats): void {
@@ -25,7 +24,8 @@ export class ConsumerSystem {
       const budget = resident.cash * 0.1 * propensity; // Spend a portion of cash daily
 
       // 3. Needs Satisfaction (Food)
-      const caloriesNeeded = GAME_CONFIG.DAILY_GRAIN_NEED;
+      // Note: Using hardcoded needs for now, but linked to config if possible.
+      const caloriesNeeded = 1.0; // Default need
       let caloriesEaten = 0;
 
       // Eat Inventory First
@@ -55,27 +55,12 @@ export class ConsumerSystem {
       const deficit = caloriesNeeded - caloriesEaten;
       
       if (deficit > 0.1 && budget > 0) {
-          // Calculate Probability to Buy based on Elasticity
-          // Logic: Q = Q_needed * (Price / RefPrice) ^ Elasticity
-          // Here, we simulate Q via probability of placing an order since agents are individual
+          const elasticity = ECO_CONSTANTS.ECONOMY.DEMAND_ELASTICITY.BREAD;
+          const refPrice = 2.0; 
           
-          const elasticity = GAME_CONFIG.ECONOMY.DEMAND_ELASTICITY.BREAD;
-          const refPrice = 2.0; // Reference price for Bread (Anchoring)
-          
-          // Demand Curve Logic
-          // If Price > RefPrice, demand shrinks based on elasticity
-          // Ratio > 1 (Price High) ^ Negative Elasticity = Ratio < 1 (Demand Down)
           const priceRatio = Math.max(0.1, breadPrice / refPrice);
           const demandFactor = Math.pow(priceRatio, elasticity);
           
-          // Residents will try to buy 'deficit' amount, scaled by demand factor
-          // But since food is a necessity, we clamp the factor. Even if expensive, they need to eat,
-          // but they might buy less surplus.
-          
-          // For survival needs (deficit), elasticity is very low (close to 0)
-          // For buying inventory buffer, elasticity is high.
-          
-          // Actual Purchase Decision
           const willBuyBread = Math.random() < demandFactor;
 
           if (willBuyBread) {

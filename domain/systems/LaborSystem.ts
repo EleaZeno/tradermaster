@@ -1,8 +1,7 @@
 
-
 import { GameState, Company, Resident, GameContext } from '../../shared/types';
 import { Transaction } from '../utils/Transaction';
-import { GAME_CONFIG } from '../../shared/config';
+import { ECO_CONSTANTS } from '../../shared/config';
 
 export class LaborSystem {
   static process(gameState: GameState, context: GameContext, livingCostBenchmark: number, wagePressureMod: number): void {
@@ -41,10 +40,7 @@ export class LaborSystem {
       if (Math.abs(lastInflation) < 0.0001) return;
 
       // Real Wage Stickiness Logic
-      // If Inflation > 0, reservation wages rise slowly (sticky up)
-      // If Deflation > 0, reservation wages drop VERY slowly (sticky down)
-      
-      const adjustmentFactor = lastInflation * GAME_CONFIG.ECONOMY.WAGE_SENSITIVITY;
+      const adjustmentFactor = lastInflation * ECO_CONSTANTS.ECONOMY.WAGE_SENSITIVITY;
       
       gameState.population.residents.forEach(res => {
           // Nominal wage expectation increases with inflation
@@ -133,8 +129,6 @@ export class LaborSystem {
         targetMultiplier = Math.max(targetMultiplier, 2.2); 
     }
 
-    // New: Wage offer must compete with CPI/Living Costs, not just raw benchmark
-    // Benchmark is essentially CPI-proxy, but we ensure it covers reservation wages
     let offer = parseFloat((benchmark * targetMultiplier).toFixed(2));
     
     const survivalWage = benchmark * 1.3;
@@ -199,7 +193,7 @@ export class LaborSystem {
       // LABOR SUPPLY LOGIC: Check Reservation Wage
       const candidate = allResidents.find(r => 
           r.job === 'FARMER' && 
-          r.reservationWage <= company.wageOffer && // CRITICAL: Workers now have reservation wages linked to inflation
+          r.reservationWage <= company.wageOffer && 
           r.happiness < 90
       );
       

@@ -4,7 +4,7 @@ import { useGameStore } from '../../shared/store/useGameStore';
 import { Card, Button } from '../../shared/components';
 import { Bot, RefreshCw, AlertTriangle, CheckCircle2, ClipboardCheck, Activity } from 'lucide-react';
 import { HealthCheckService } from '../../domain/analytics/HealthCheckService';
-import { auditEconomy } from '../../infrastructure/ai/GeminiAdapter';
+import { aiService } from '../../infrastructure/ai/GeminiAdapter';
 import DOMPurify from 'dompurify';
 
 // @ts-ignore
@@ -20,7 +20,7 @@ export const AIDiagnosisPanel: React.FC = () => {
       setLoading(true);
       const snapshot = HealthCheckService.captureSnapshot(gameState);
       try {
-          const result = await auditEconomy(snapshot);
+          const result = await aiService.auditEconomy(snapshot);
           setReport(result);
           setLastAuditDay(gameState.day);
       } catch (e) {

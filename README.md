@@ -1,54 +1,96 @@
+# EcoTycoon AI - Immersive Economic Simulator
 
-# TraderMaster - 经济模拟游戏
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Tech](https://img.shields.io/badge/Tech-React%20%7C%20TypeScript%20%7C%20Zustand%20%7C%20Gemini-green)
 
-## 项目介绍
-EcoTycoon AI (TraderMaster) 是一个基于React和TypeScript的复杂经济模拟游戏，玩家可以在虚拟世界中创建公司、进行商品交易、投资股票、制定经济政策等。
+**EcoTycoon AI** is a sophisticated browser-based economic simulation game. It models a closed-loop economy with realistic micro-foundations (agent-based modeling) and macro-economic dynamics (business cycles, inflation, monetary policy).
 
-## 核心功能
-- **市场经济系统**：真实的供需机制和限价订单簿 (Limit Order Book)
-- **企业管理**：创建和管理不同行业的公司，设定工资与价格
-- **金融市场**：股票、商品和期货交易，实时K线图
-- **银行系统**：央行货币政策 (泰勒规则) 和通胀控制
-- **人口模拟**：AI驱动的居民行为 (基于效用函数与消费倾向)
-- **政府政策**：税收、财政政策和社会福利调节
-- **AI助手**：智能市场分析和经济建议 (Gemini AI)
+Powered by **Google Gemini 2.5 Flash**, the game features an AI Chief Economist that can diagnose the economy, generate news events, and provide strategic advice based on real-time simulation data.
 
-## 技术架构
-- **前端框架**：React 18 + TypeScript 5.2
-- **构建工具**：Vite 5.1
-- **样式框架**：Tailwind CSS 3.4
-- **状态管理**：Zustand 4.5 + Immer 10.0
-- **数据可视化**：Recharts 2.12
-- **开发工具**：ESLint, Prettier, Husky, Vitest
+---
 
-## 快速开始
+## 🧠 Core Economic Engines
 
-1. **安装依赖**
-   ```bash
-   npm install
-   ```
+### 1. Micro-Foundations (Agent-Based)
+*   **Residents (Agents):** 30+ autonomous agents with individual utility functions (Stone-Geary / Cobb-Douglas), memory, and political stances.
+*   **Labor Market:** Dynamic wage setting based on Marginal Productivity Theory of Labor (MPL). Agents have reservation wages that adjust to inflation expectations (Sticky Wages).
+*   **Consumption:** Keynesian consumption functions with dynamic Marginal Propensity to Consume (MPC) based on consumer sentiment and wealth.
 
-2. **配置环境变量**
-   复制 `.env.example` 为 `.env.local` 并设置 `GEMINI_API_KEY` (可选，用于AI功能)。
+### 2. Market Microstructure
+*   **Limit Order Book (LOB):** Every transaction (Grain, Bread, Stocks) passes through a realistic matching engine. Prices are emergent properties of supply and demand, not arbitrary formulas.
+*   **Supply Chain:** `Raw Material (Grain)` -> `Manufacturing (Bread)` -> `Consumer`. Supply shocks propagate through the chain.
 
-3. **启动开发服务器**
-   ```bash
-   npm run dev
-   ```
+### 3. Macro-Economics & Policy
+*   **Central Bank:** Implements the **Taylor Rule** to automatically adjust interest rates to target inflation and unemployment.
+*   **Business Cycles:** Simulates distinct phases (Expansion, Peak, Recession, Depression, Recovery) based on GDP growth and inflation signals.
+*   **Fiscal Policy:** Government collects taxes (Income, Corporate, Consumption) and manages welfare/stimulus based on the Mayor's personality (Keynesian, Austrian, Populist).
 
-4. **运行测试**
-   ```bash
-   npm run test
-   ```
+### 4. Validation Lab (Stylized Facts)
+The simulation is calibrated against real-world economic laws:
+*   **Phillips Curve:** Trade-off between unemployment and inflation.
+*   **Okun's Law:** Relationship between GDP growth and unemployment.
+*   **Zipf's Law:** Power-law distribution of firm sizes.
+*   **Quantity Theory of Money (QTM):** Long-run relationship between money supply and price levels.
 
-## 经济概念
-- **供需关系**：所有商品价格由市场限价订单簿 (LOB) 撮合决定。
-- **生产函数**：采用 Cobb-Douglas 生产函数模拟产出 (Y = A * K^α * L^β)。
-- **货币政策**：央行根据泰勒规则 (Taylor Rule) 自动调节利率以控制通胀。
-- **验证实验室**：内置经济学模型校准 (如菲利普斯曲线验证)。
+---
 
-## 贡献
-欢迎提交 Pull Request 来改进游戏机制或修复 Bug。
+## 🛠️ Technical Architecture
 
-## 许可证
+The project follows a **Domain-Driven Design (DDD)** approach to manage complexity.
+
+```text
+src/
+├── application/    # Game Loop & Orchestration
+├── domain/         # Pure Logic (Banking, Labor, Production, Market)
+├── features/       # React UI Components (Dashboards, Modals)
+├── infrastructure/ # External Services (Gemini AI Adapter)
+└── shared/         # Stores, Types, Config, Utils
+```
+
+*   **Frontend:** React 18, Tailwind CSS, Framer Motion.
+*   **State Management:** Zustand + Immer (Mutable draft syntax).
+*   **Visualization:** Recharts for real-time K-Line charts and macro indicators.
+*   **Performance:** Optimized tick processing with dedicated update rates for different subsystems.
+
+---
+
+## 🚀 Quick Start
+
+1.  **Install Dependencies**
+    ```bash
+    npm install
+    ```
+
+2.  **Environment Setup**
+    Ensure you have a valid Gemini API Key if you wish to use the AI features.
+    The app expects `process.env.API_KEY` to be injected by the environment/build tool.
+
+3.  **Run Development Server**
+    ```bash
+    npm run dev
+    ```
+
+4.  **Run Tests**
+    ```bash
+    npm run test
+    ```
+
+---
+
+## 🎮 How to Play
+
+1.  **The Dashboard:** Monitor the Health Score and Business Cycle. Watch the **Supply Chain Visualization** for bottlenecks.
+2.  **My Empire:** Use your starting capital to **Create a Company (IPO)** or trade commodities.
+3.  **Stock Market:** Buy shares in undervalued companies (Look at P/E and Tobin's Q).
+4.  **City Hall:** Monitor the Mayor's fiscal policies. High taxes might stifle growth; high spending might cause inflation.
+5.  **AI Validation:** Go to the "Validation" tab to run an "AI Diagnosis" or perform "Policy Shocks" (e.g., print money) to see what happens.
+
+---
+
+## 🤝 Contribution
+
+Contributions are welcome! Please ensure any logic changes maintain the conservation of mass (money/inventory) within the system.
+
+## 📄 License
+
 MIT

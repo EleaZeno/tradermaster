@@ -1,4 +1,6 @@
 
+
+
 import { GameState, ProductType, ResourceType, GDPFlowAccumulator } from '../../shared/types';
 import { GAME_CONFIG } from '../../shared/config';
 
@@ -71,6 +73,7 @@ export class DemographicsService {
             politicalStance: 'CENTRIST', happiness: 70, inventory: {}, portfolio: {}, futuresPositions: [],
             livingStandard: 'SURVIVAL', timePreference: 0.5, needs: {}, landTokens: 0,
             reservationWage: 1.0, propensityToConsume: 0.9,
+            riskAversion: 1.0,
             preferenceWeights: { [ProductType.BREAD]: 0.6, [ResourceType.GRAIN]: 0.3, savings: 0.1 }
         });
         pop.total++;

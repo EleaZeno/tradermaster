@@ -1,46 +1,5 @@
 
-import { GameState, ResourceType, ProductType, IndustryType, EconomicHealth } from '../../shared/types';
-
-export interface EconomicHealthSnapshot {
-  timestamp: number;
-  macro: {
-    gdp: number;
-    gdp_growth_7d: number;
-    inflation_rate: number;
-    unemployment_rate: number;
-    money_supply_m2: number;
-    money_velocity_est: number; // GDP / M2
-  };
-  markets: Record<string, {
-    price: number;
-    spread: number;
-    buy_pressure: number; // Total bid vol
-    sell_pressure: number; // Total ask vol
-    inventory_market: number;
-  }>;
-  companies: {
-    total: number;
-    bankrupt: number;
-    avg_profit_margin: number;
-    avg_cash: number;
-    total_inventory_value: number;
-    tobin_q_avg: number;
-  };
-  labor: {
-    avg_wage: number;
-    labor_demand_openings: number;
-    labor_supply_unemployed: number;
-    productivity_avg: number; // GDP / Employed
-    wage_share_gdp: number; // Total Wages / GDP
-  };
-  finance: {
-    interest_rate: number;
-    yield_curve_slope: number; // 1Y - 1D
-    total_debt: number;
-    leverage_ratio: number; // Debt / Equity
-    reserves_ratio: number;
-  };
-}
+import { GameState, ResourceType, ProductType, IndustryType, EconomicHealth, EconomicHealthSnapshot } from '../../shared/types';
 
 export class HealthCheckService {
   

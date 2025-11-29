@@ -2,8 +2,8 @@
 import { StateCreator } from 'zustand';
 import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure, PolicyOverrides, MonetarySystemType } from '../types';
 import { INITIAL_STATE } from '../initialState';
-import { processGameTick } from '../../application/GameLoop';
-import { MarketService } from '../../domain/market/MarketService';
+import { processGameTick } from '../../domain/gameLogic';
+import { MarketSystem } from '../../domain/systems/MarketSystem';
 import { checkAchievements, ACHIEVEMENTS } from '../../services/achievementService';
 
 export interface UISlice {
@@ -52,6 +52,12 @@ export interface GameSlice {
 }
 
 export type GameStore = GameSlice & UISlice & MarketSlice & PlayerSlice & CompanySlice & BankSlice;
+
+const triggerEffect = (type: string, value: number, label: string, x?: number, y?: number) => {
+    window.dispatchEvent(new CustomEvent('game-effect', {
+        detail: { type, value, label, x, y }
+    }));
+};
 
 export const createUISlice: StateCreator<GameStore, [["zustand/immer", never]], [], UISlice> = (set) => ({
   addLog: (log) => set((state) => {
@@ -103,8 +109,9 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
 
     const isRes = Object.values(ResourceType).includes(itemId as ResourceType);
     let quantity = isRes ? 10 : 1;
+    const prevCash = playerRes.cash;
 
-    MarketService.submitOrder(state.gameState, {
+    MarketSystem.submitOrder(state.gameState, {
       ownerId: playerRes.id,
       ownerType: 'RESIDENT',
       itemId: itemId,
@@ -115,6 +122,21 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
     });
 
     state.gameState.cash = playerRes.cash;
+    
+    // Trigger Effects (Visual Feedback)
+    if (action === 'sell') {
+        const gain = playerRes.cash - prevCash;
+        if (gain > 0) {
+            triggerEffect('income', gain, 'oz');
+            triggerEffect('item_loss', quantity, itemId);
+        }
+    } else {
+        const loss = prevCash - playerRes.cash;
+        if (loss > 0) {
+            triggerEffect('expense', loss, 'oz');
+            triggerEffect('item_gain', quantity, itemId);
+        }
+    }
   }),
 
   buyFutures: (resId, type) => set((state) => {
@@ -132,6 +154,7 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
       player.futuresPositions.push(contract);
       state.gameState.futures.push(contract);
       state.gameState.logs.unshift(`📜 开仓 ${type} ${res.name}`);
+      triggerEffect('expense', margin, 'Margin');
     }
   }),
 });
@@ -140,9 +163,10 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
   buyStock: (id, isFund) => set((state) => {
     const player = state.gameState.population.residents.find(r => r.isPlayer);
     if (!player) return;
+    const prevCash = player.cash;
 
     if (!isFund) {
-      MarketService.submitOrder(state.gameState, {
+      MarketSystem.submitOrder(state.gameState, {
         ownerId: player.id,
         ownerType: 'RESIDENT',
         itemId: id,
@@ -152,14 +176,21 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
         quantity: 100
       });
       state.gameState.cash = player.cash;
+      
+      const cost = prevCash - player.cash;
+      if (cost > 0) {
+          triggerEffect('expense', cost, 'oz');
+          triggerEffect('item_gain', 100, 'Shares');
+      }
     }
   }),
 
   sellStock: (id, isFund) => set((state) => {
     const player = state.gameState.population.residents.find(r => r.isPlayer);
     if (!player) return;
+    const prevCash = player.cash;
 
-    MarketService.submitOrder(state.gameState, {
+    MarketSystem.submitOrder(state.gameState, {
       ownerId: player.id,
       ownerType: 'RESIDENT',
       itemId: id,
@@ -169,13 +200,20 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
       quantity: 100
     });
     state.gameState.cash = player.cash;
+    
+    const gain = player.cash - prevCash;
+    if (gain > 0) {
+        triggerEffect('income', gain, 'oz');
+        triggerEffect('item_loss', 100, 'Shares');
+    }
   }),
 
   shortStock: (id, isFund) => set((state) => {
     const player = state.gameState.population.residents.find(r => r.isPlayer);
     if (!player) return;
+    const prevCash = player.cash;
 
-    MarketService.submitOrder(state.gameState, {
+    MarketSystem.submitOrder(state.gameState, {
       ownerId: player.id,
       ownerType: 'RESIDENT',
       itemId: id,
@@ -186,14 +224,17 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     });
 
     state.gameState.cash = player.cash;
+    const gain = player.cash - prevCash;
+    if (gain > 0) triggerEffect('income', gain, 'oz (Short)');
     state.gameState.logs.unshift(`📈 做空 (Short) ${id} - 100股`);
   }),
 
   coverStock: (id, isFund) => set((state) => {
     const player = state.gameState.population.residents.find(r => r.isPlayer);
     if (!player) return;
+    const prevCash = player.cash;
 
-    MarketService.submitOrder(state.gameState, {
+    MarketSystem.submitOrder(state.gameState, {
       ownerId: player.id,
       ownerType: 'RESIDENT',
       itemId: id,
@@ -204,6 +245,8 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     });
 
     state.gameState.cash = player.cash;
+    const cost = prevCash - player.cash;
+    if (cost > 0) triggerEffect('expense', cost, 'oz (Cover)');
     state.gameState.logs.unshift(`📉 平仓 (Cover) ${id} + 100股`);
   }),
 
@@ -228,11 +271,12 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
 
       state.gameState.companies.push({
         id: newId, name: name || "New Corp",
-        productionLines: [{ type, isActive: true, efficiency: 1.0, allocation: 1.0 }],
+        productionLines: [{ type, isActive: true, efficiency: 1.0, allocation: 1.0, maxCapacity: 50 }],
         cash: 20, sharePrice: 1.0, totalShares: 1000, ownedShares: 1000,
         shareholders: [{ id: 'res_player', name: "Player", count: 1000, type: 'PLAYER' }],
         isPlayerFounded: true, employees: 1, targetEmployees: 5,
         wageOffer: 1.5, wageMultiplier: 1.5,
+        lastWageUpdate: 0,
         pricePremium: 0, executiveSalary: 3.0, dividendRate: 0, margin: 0.2,
         aiPersonality: 'BALANCED', boardMembers: [], unionTension: 0, strikeDays: 0,
         inventory: { raw: {}, finished: { [type]: 0 } },
@@ -251,9 +295,10 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
         kpis: { roe: 0, roa: 0, roi: 0, leverage: 0, marketShare: 0 }
       });
       
-      state.gameState.market[newId] = { bids: [], asks: [], lastPrice: 1.0, history: [] };
+      state.gameState.market[newId] = { bids: [], asks: [], lastPrice: 1.0, history: [], volatility: 0, spread: 0 };
 
       state.gameState.logs.unshift(`🎉 ${name} 上市成功！`);
+      triggerEffect('expense', IPO_COST, 'IPO Cost');
       
       state.gameState.notifications.push({
           id: `ipo_${Date.now()}`,
@@ -279,7 +324,12 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
     comp.shareholders.forEach(s => {
       if (s.type === 'PLAYER') {
         const p = state.gameState.population.residents.find(r => r.isPlayer);
-        if (p) { p.cash += s.count * perShare; state.gameState.cash = p.cash; }
+        if (p) { 
+            const amt = s.count * perShare;
+            p.cash += amt; 
+            state.gameState.cash = p.cash; 
+            triggerEffect('income', amt, 'Dividend');
+        }
       }
     });
     state.gameState.logs.unshift(`💸 ${comp.name} 分红 ${totalDiv.toFixed(0)} oz`);
@@ -295,7 +345,7 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
     const comp = state.gameState.companies.find(c => c.id === compId);
     if (comp && comp.cash > 100) {
       comp.cash -= 100;
-      comp.productionLines.push({ type, isActive: true, efficiency: 0.8, allocation: 0.2 });
+      comp.productionLines.push({ type, isActive: true, efficiency: 0.8, allocation: 0.2, maxCapacity: 50 });
       comp.productionLines.forEach(l => l.allocation = 1 / comp.productionLines.length);
     }
   }),

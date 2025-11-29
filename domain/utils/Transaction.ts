@@ -1,3 +1,4 @@
+
 import { Resident, CityTreasury, TransactionParty, CashEntity, GameContext } from '../../shared/types';
 
 export interface TransferContext {

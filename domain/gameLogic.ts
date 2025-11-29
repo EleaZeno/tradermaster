@@ -1,11 +1,12 @@
 
-import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident, MarketEvent } from '../shared/types';
+import { GameState, ResourceType, ProductType, FlowStats, GameContext, Resident } from '../shared/types';
 import { LaborSystem } from './systems/LaborSystem';
 import { ProductionSystem } from './systems/ProductionSystem';
 import { ConsumerSystem } from './systems/ConsumerSystem';
 import { FinancialSystem } from './systems/FinancialSystem';
 import { BankingSystem } from './systems/BankingSystem';
 import { MarketSystem } from './systems/MarketSystem';
+import { SanityCheckSystem } from './analytics/SanityCheckSystem';
 import { GAME_CONFIG } from '../shared/config';
 
 /**
@@ -47,11 +48,7 @@ export const processGameTick = (gameState: GameState): void => {
     // 0. Market Maintenance (Every Tick)
     // Essential for UI responsiveness and trading fluidity
     if (currentTick % rates.MARKET === 0) {
-        // Only build simple context or pass partial context if needed, 
-        // but MarketSystem uses context for O(1) lookups. 
-        // If context is undefined (heavy systems not running), we might need to lazy load it or fallback to array find.
-        // For stability, let's allow MarketSystem to fallback to array lookups if context is missing,
-        // OR simple optimizations inside MarketSystem.
+        // Fallback context if needed
         MarketSystem.pruneStaleOrders(gameState, context || createFallbackContext(gameState));
     }
 
@@ -91,6 +88,9 @@ export const processGameTick = (gameState: GameState): void => {
         if (currentTick % rates.MACRO === 0) {
              FinancialSystem.runAudit(gameState, flowStats);
         }
+        
+        // Sanity Check Daily
+        SanityCheckSystem.check(gameState);
     }
 
     // 2. Macro Systems (Banking, Stock Valuation)
@@ -105,8 +105,6 @@ export const processGameTick = (gameState: GameState): void => {
 };
 
 const createFallbackContext = (gameState: GameState): GameContext => {
-    // Fallback context creation for ticks where heavy systems don't run but Market needs lookups.
-    // Ideally this shouldn't be too heavy if resident count is low (30).
     const residentMap = new Map(gameState.population.residents.map(r => [r.id, r]));
     const companyMap = new Map(gameState.companies.map(c => [c.id, c]));
     return { residentMap, companyMap, employeesByCompany: {}, residentsByJob: {} };

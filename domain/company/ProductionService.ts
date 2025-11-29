@@ -2,7 +2,7 @@
 import { GameState, ResourceType, ProductType, IndustryType, FlowStats, GameContext, GDPFlowAccumulator } from '../../shared/types';
 import { MarketService } from '../market/MarketService';
 import { TransactionService } from '../finance/TransactionService';
-import { GAME_CONFIG } from '../../shared/config';
+import { ECO_CONSTANTS } from '../../shared/config';
 
 export class ProductionService {
   static process(
@@ -13,6 +13,7 @@ export class ProductionService {
       gdpFlow: GDPFlowAccumulator
   ): void {
     ProductionService.processFixedCosts(gameState, context, gdpFlow);
+    ProductionService.processDepreciation(gameState);
     ProductionService.processSpoilage(gameState, flowStats);
     ProductionService.processFarming(gameState, context, flowStats, getEventModifier);
     ProductionService.processManufacturing(gameState, context, flowStats, getEventModifier);
@@ -24,22 +25,37 @@ export class ProductionService {
       state.companies.forEach(company => {
           if (company.isBankrupt) return;
 
-          const fixedCost = (company.productionLines.length * GAME_CONFIG.ECONOMY.FIXED_COST_PER_LINE) + 
-                            ((company.landTokens || 0) * GAME_CONFIG.ECONOMY.FIXED_COST_PER_LAND);
+          const fixedCost = (company.productionLines.length * ECO_CONSTANTS.ECONOMY.FIXED_COST_PER_LINE) + 
+                            ((company.landTokens || 0) * ECO_CONSTANTS.ECONOMY.FIXED_COST_PER_LAND);
           
           if (company.cash >= fixedCost) {
                TransactionService.transfer(company, 'TREASURY', fixedCost, { treasury: state.cityTreasury, residents: state.population.residents, context });
                company.accumulatedCosts += fixedCost;
                company.lastFixedCost = fixedCost;
-               
-               // Fixed costs paid to Govt (rent/tax) or Service sector (abstracted)
-               // If paid to Treasury, it's a transfer, not G.
-               // However, if we consider it "Service consumption" by the firm, it's intermediate consumption, not GDP.
-               // But usually "G" is spending. Transfer to Govt is Tax.
           } else {
                company.cash = 0; 
                company.productionLines.forEach(l => l.efficiency *= 0.95);
                if (company.employees > 0) company.unionTension += 5;
+          }
+      });
+  }
+
+  private static processDepreciation(state: GameState): void {
+      const rate = ECO_CONSTANTS.ECONOMY.DEPRECIATION_RATE;
+      const scrapThreshold = ECO_CONSTANTS.ECONOMY.SCRAP_EFFICIENCY_THRESHOLD;
+
+      state.companies.forEach(company => {
+          if (company.isBankrupt) return;
+
+          // Capital Depreciation
+          for (let i = company.productionLines.length - 1; i >= 0; i--) {
+              const line = company.productionLines[i];
+              line.efficiency *= (1 - rate);
+              
+              if (line.efficiency < scrapThreshold) {
+                  company.productionLines.splice(i, 1);
+                  state.logs.unshift(`🏚️ ${company.name} 生产线报废 (效率过低)`);
+              }
           }
       });
   }
@@ -64,13 +80,18 @@ export class ProductionService {
           const q = marketCap / (replacementCost || 1);
           company.tobinQ = parseFloat(q.toFixed(2));
 
-          if (q > 1.2 && company.cash > 200) {
+          // Investment Rule: Q > 1.2 AND Expected ROI > Interest Rate
+          const interestRate = state.bank.yieldCurve.rate365d;
+          // Simple ROI proxy: Margin
+          const expectedROI = company.margin || 0;
+
+          if (q > 1.2 && company.cash > 200 && expectedROI > interestRate) {
               const lineType = company.productionLines[0].type;
               company.cash -= 100;
-              // Investment (I): Building new capacity
               gdpFlow.I += 100; 
               
-              company.productionLines.push({ type: lineType, isActive: true, efficiency: 0.9, allocation: 0 });
+              // Fresh capital is 100% efficient and has capacity 50
+              company.productionLines.push({ type: lineType, isActive: true, efficiency: 1.0, allocation: 0, maxCapacity: 50 }); 
               const count = company.productionLines.length;
               company.productionLines.forEach(l => l.allocation = 1 / count);
               state.logs.unshift(`🏭 ${company.name} 扩建生产线 (Tobin's Q: ${q.toFixed(2)})`);
@@ -208,26 +229,37 @@ export class ProductionService {
         
         let totalSkillProductivity = 0;
         actualWorkers.forEach(w => {
-            let mult = GAME_CONFIG.LABOR.PRODUCTIVITY_MULTIPLIER.NOVICE;
-            if (w.skill === 'SKILLED') mult = GAME_CONFIG.LABOR.PRODUCTIVITY_MULTIPLIER.SKILLED;
-            if (w.skill === 'EXPERT') mult = GAME_CONFIG.LABOR.PRODUCTIVITY_MULTIPLIER.EXPERT;
+            let mult = ECO_CONSTANTS.LABOR.PRODUCTIVITY_MULTIPLIER.NOVICE;
+            if (w.skill === 'SKILLED') mult = ECO_CONSTANTS.LABOR.PRODUCTIVITY_MULTIPLIER.SKILLED;
+            if (w.skill === 'EXPERT') mult = ECO_CONSTANTS.LABOR.PRODUCTIVITY_MULTIPLIER.EXPERT;
             totalSkillProductivity += mult;
         });
         
         const L = totalSkillProductivity;
         const A = line.efficiency * ceoMod * mod;
         const K = Math.max(1, company.landTokens || 1); 
-        const output = 2.5 * A * Math.pow(K, 0.3) * Math.pow(L, 0.7);
+        
+        // Unconstrained Output (Cobb-Douglas)
+        let output = 2.5 * A * Math.pow(K, 0.3) * Math.pow(L, 0.7);
+
+        // CAPACITY CONSTRAINT LOGIC
+        // If actual output exceeds installed capacity, efficiency drops drastically (bottlenecks)
+        const installedCapacity = line.maxCapacity || 50; 
+        if (output > installedCapacity) {
+            // Soft Cap: Returns diminish rapidly after 100% capacity
+            // Output = Cap + (Surplus ^ 0.5)
+            const surplus = output - installedCapacity;
+            output = installedCapacity + Math.pow(surplus, 0.5);
+            // This implicitly increases Marginal Cost as you need WAY more L/K to get output
+        }
 
         let materialCost = 0;
         let actualOutput = output;
         
-        // --- STRICT SUPPLY CHAIN ---
         if (line.type === ProductType.BREAD) {
             const needed = output * 0.8;
             let currentRaw = company.inventory.raw[ResourceType.GRAIN] || 0;
             
-            // Auto Procurement
             if (currentRaw < needed && company.cash > 0) {
                 const book = gameState.market[ResourceType.GRAIN];
                 const bestAsk = book?.asks[0]?.price;
@@ -251,17 +283,14 @@ export class ProductionService {
                 }
             }
 
-            // Production Limit by Input Availability
             if (currentRaw < needed) {
                 actualOutput = currentRaw / 0.8; 
-                // Supply Chain Shock! Production halted due to missing input.
             }
             
             const consumed = actualOutput * 0.8;
             if (consumed > 0) {
                 company.inventory.raw[ResourceType.GRAIN] = (company.inventory.raw[ResourceType.GRAIN] || 0) - consumed;
                 flowStats[ResourceType.GRAIN].consumed += consumed;
-                // Marginal Cost calculation uses Current Market Price of inputs
                 materialCost += consumed * gameState.resources[ResourceType.GRAIN].currentPrice; 
             }
         }

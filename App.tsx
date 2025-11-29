@@ -13,8 +13,9 @@ import { ValidationTab } from './features/validation/ValidationTab';
 import { ChatWidget } from './components/ChatWidget';
 import { CompanyModal } from './features/companies/CompanyModal';
 import { CreateCompanyModal } from './features/companies/CreateCompanyModal';
-import { generateMarketEvent } from './infrastructure/ai/GeminiAdapter';
+import { aiService } from './infrastructure/ai/GeminiAdapter';
 import { ToastContainer } from './components/ui/ToastContainer';
+import { FloatingTextLayer } from './components/ui/FloatingTextLayer';
 import { DevTools } from './components/devtools/DevTools';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from './shared/store/useGameStore';
@@ -54,7 +55,7 @@ const App: React.FC = () => {
              const currentEvents = useGameStore.getState().gameState.events;
              if (currentEvents.length > 0 && day - currentEvents[0].turnCreated < 5) return;
              
-             const evt = await generateMarketEvent(day);
+             const evt = await aiService.generateMarketEvent(day);
              if (isActive && evt) {
                  addEvent(evt);
              }
@@ -219,6 +220,7 @@ const App: React.FC = () => {
       </div>
 
       <ToastContainer />
+      <FloatingTextLayer />
       <DevTools isOpen={showDevTools} onToggle={() => setShowDevTools(p => !p)} /> 
       <ChatWidget />
 

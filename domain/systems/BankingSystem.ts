@@ -1,30 +1,23 @@
 
 import { GameState, Bank, GameContext, Loan } from '../../shared/types';
+import { safeDivide } from '../../shared/utils/math';
+import { ECO_CONSTANTS } from '../../shared/config';
 
 export class BankingSystem {
     static process(state: GameState, context: GameContext): void {
         const bank = state.bank;
         
-        // 0. Monetary Policy (Taylor Rule)
         BankingSystem.applyMonetaryPolicy(state, bank);
-
-        // 1. Accrue Interest
         BankingSystem.processInterest(state, bank, context);
-
-        // 2. Manage Deposits (Households)
         BankingSystem.processDeposits(state, bank, context);
-
-        // 3. Manage Loans (Money Creation via Credit)
         BankingSystem.processLoans(state, bank, context);
 
-        // 4. Update Money Supply Metrics
-        bank.moneySupply = bank.totalDeposits + bank.totalLoans; // Approximation of M2
-        bank.creditMultiplier = bank.moneySupply / Math.max(1, bank.reserves);
+        bank.moneySupply = bank.totalDeposits + bank.totalLoans; 
+        bank.creditMultiplier = safeDivide(bank.moneySupply, Math.max(1, bank.reserves));
 
-        // 5. Record History
         const lastCpi = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].cpi : 0;
         const prevCpi = state.macroHistory.length > 1 ? state.macroHistory[state.macroHistory.length - 2].cpi : lastCpi;
-        const inflation = prevCpi > 0 ? (lastCpi - prevCpi) / prevCpi : 0;
+        const inflation = safeDivide(lastCpi - prevCpi, prevCpi);
 
         bank.history.push({ 
             day: state.day, 
@@ -53,12 +46,12 @@ export class BankingSystem {
         if (history.length > 7) {
             const now = history[history.length - 1].cpi;
             const weekAgo = history[history.length - 8].cpi;
-            currentInflation = (now - weekAgo) / weekAgo;
+            currentInflation = safeDivide(now - weekAgo, weekAgo);
         }
 
         const unemployed = state.population.residents.filter(r => r.job === 'UNEMPLOYED' || (r.job === 'FARMER' && !r.employerId)).length;
         const totalLaborForce = state.population.total;
-        const currentUnemployment = unemployed / totalLaborForce;
+        const currentUnemployment = safeDivide(unemployed, totalLaborForce);
 
         const pi = currentInflation;
         const piStar = bank.targetInflation / 52;
@@ -144,20 +137,14 @@ export class BankingSystem {
         companies.forEach(comp => {
             if (comp.isBankrupt) return;
 
-            // 1. Repay existing loans (Money Destruction)
+            // 1. Repay existing loans
             const loans = bank.loans.filter(l => l.borrowerId === comp.id);
             loans.forEach(loan => {
                 if (comp.cash > 200) {
                     const repayment = Math.min(comp.cash - 150, loan.remainingPrincipal); 
                     if (repayment > 0) {
-                        comp.cash -= repayment; // Burn cash from economy
+                        comp.cash -= repayment; 
                         loan.remainingPrincipal -= repayment;
-                        
-                        // Technically repayment increases bank reserves or reduces asset side
-                        // In this simplified model: Repayment acts as reverse money creation
-                        // We don't add to bank.reserves because the original loan didn't subtract reserves (it was created)
-                        // But wait, if we want conservation of mass for Base Money (M0), we should handle it.
-                        // Let's assume Loan Repayment goes back to Bank Equity (which effectively removes it from circulation M1/M2)
                         
                         if (loan.remainingPrincipal <= 0.1) {
                             bank.loans = bank.loans.filter(l => l.id !== loan.id);
@@ -167,8 +154,7 @@ export class BankingSystem {
                 }
             });
 
-            // 2. Take new loans (Money Creation)
-            // Limit based on Reserves / Ratio (Fractional Reserve Limit)
+            // 2. Take new loans
             const maxLendingCapacity = (bank.reserves / reserveRequirement) - bank.totalLoans;
             
             const stockValue = Object.values(comp.inventory.finished).reduce((a,b)=>a+(Number(b)||0)*2, 0); 
@@ -177,13 +163,11 @@ export class BankingSystem {
                 const existingDebt = loans.reduce((a,b) => a + b.remainingPrincipal, 0);
                 const available = creditLimit - existingDebt;
                 
-                const ratePainThreshold = 0.01; 
-                const desperation = comp.cash < 20; 
-                
                 if (available > 50) {
                     const marketRate = bank.yieldCurve.rate30d;
+                    const desperation = comp.cash < 20; 
                     
-                    if (marketRate < ratePainThreshold || desperation) {
+                    if (marketRate < 0.05 || desperation) {
                         const borrowAmount = 100;
                         if (maxLendingCapacity >= borrowAmount) {
                             const newLoan: Loan = {
@@ -195,12 +179,10 @@ export class BankingSystem {
                                 dueDate: state.day + 30
                             };
                             bank.loans.push(newLoan);
-                            // MAGIC: Money Creation!
-                            // We do NOT subtract from reserves. We expand the balance sheet.
-                            // Assets: +Loan, Liabilities: +Deposit (Company Cash)
+                            // Money Creation
                             comp.cash += borrowAmount; 
                             
-                            state.logs.unshift(`🏦 ${comp.name} 获得信贷 ${borrowAmount} oz (M2 Expansion)`);
+                            state.logs.unshift(`🏦 ${comp.name} 获得信贷 ${borrowAmount} oz`);
                         }
                     }
                 }

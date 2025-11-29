@@ -1,13 +1,13 @@
 
-
 import { GameState, ResourceType, ProductType, IndustryType, FlowStats, GameContext, Company } from '../../shared/types';
 import { MarketSystem } from './MarketSystem';
 import { Transaction } from '../utils/Transaction';
-import { GAME_CONFIG } from '../../shared/config';
+import { ECO_CONSTANTS } from '../../shared/config';
 
 export class ProductionSystem {
   static process(gameState: GameState, context: GameContext, flowStats: FlowStats, getEventModifier: (t: string) => number): void {
     ProductionSystem.processFixedCosts(gameState, context);
+    ProductionSystem.processDepreciation(gameState);
     ProductionSystem.processSpoilage(gameState, flowStats);
     ProductionSystem.processFarming(gameState, context, flowStats, getEventModifier);
     ProductionSystem.processManufacturing(gameState, context, flowStats, getEventModifier);
@@ -15,23 +15,40 @@ export class ProductionSystem {
     ProductionSystem.processCapitalAllocation(gameState, context);
   }
 
-  // New: Apply fixed costs (Rent, Maintenance) regardless of production
   private static processFixedCosts(state: GameState, context: GameContext): void {
       state.companies.forEach(company => {
           if (company.isBankrupt) return;
 
-          const fixedCost = (company.productionLines.length * GAME_CONFIG.ECONOMY.FIXED_COST_PER_LINE) + 
-                            ((company.landTokens || 0) * GAME_CONFIG.ECONOMY.FIXED_COST_PER_LAND);
+          const fixedCost = (company.productionLines.length * ECO_CONSTANTS.ECONOMY.FIXED_COST_PER_LINE) + 
+                            ((company.landTokens || 0) * ECO_CONSTANTS.ECONOMY.FIXED_COST_PER_LAND);
           
           if (company.cash >= fixedCost) {
                Transaction.transfer(company, 'TREASURY', fixedCost, { treasury: state.cityTreasury, residents: state.population.residents, context });
                company.accumulatedCosts += fixedCost;
                company.lastFixedCost = fixedCost;
           } else {
-               // If can't pay fixed costs, debt or bankruptcy risk increases
-               company.cash = 0; // Bleed dry
-               // If 0 cash and can't pay, efficiency drops
+               company.cash = 0; 
                company.productionLines.forEach(l => l.efficiency *= 0.95);
+          }
+      });
+  }
+
+  private static processDepreciation(state: GameState): void {
+      const rate = ECO_CONSTANTS.ECONOMY.DEPRECIATION_RATE;
+      const scrapThreshold = ECO_CONSTANTS.ECONOMY.SCRAP_EFFICIENCY_THRESHOLD;
+
+      state.companies.forEach(company => {
+          if (company.isBankrupt) return;
+
+          // Capital Depreciation
+          for (let i = company.productionLines.length - 1; i >= 0; i--) {
+              const line = company.productionLines[i];
+              line.efficiency *= (1 - rate);
+              
+              if (line.efficiency < scrapThreshold) {
+                  company.productionLines.splice(i, 1);
+                  state.logs.unshift(`🏚️ ${company.name} 生产线报废 (效率过低)`);
+              }
           }
       });
   }
@@ -40,8 +57,6 @@ export class ProductionSystem {
       state.companies.forEach(company => {
           if (company.isBankrupt || company.isPlayerFounded) return;
 
-          // Calculate Tobin's Q
-          // Q = Market Value / Replacement Cost
           const marketCap = company.sharePrice * company.totalShares;
           
           let inventoryValue = 0;
@@ -50,7 +65,6 @@ export class ProductionSystem {
              inventoryValue += (v || 0) * price;
           });
           Object.entries(company.inventory.finished).forEach(([k, v]) => {
-              // Est price
               inventoryValue += (v || 0) * 2; 
           });
 
@@ -59,13 +73,10 @@ export class ProductionSystem {
           const q = marketCap / (replacementCost || 1);
           company.tobinQ = parseFloat(q.toFixed(2));
 
-          // Investment Rule
-          // If Q > 1.2, Market values firm more than its assets -> Expand
           if (q > 1.2 && company.cash > 200) {
               const lineType = company.productionLines[0].type;
               company.cash -= 100;
-              company.productionLines.push({ type: lineType, isActive: true, efficiency: 0.9, allocation: 0 });
-              // Rebalance allocation
+              company.productionLines.push({ type: lineType, isActive: true, efficiency: 1.0, allocation: 0, maxCapacity: 50 });
               const count = company.productionLines.length;
               company.productionLines.forEach(l => l.allocation = 1 / count);
               state.logs.unshift(`🏭 ${company.name} 扩建生产线 (Tobin's Q: ${q.toFixed(2)})`);
@@ -74,7 +85,6 @@ export class ProductionSystem {
   }
 
   private static manageSales(state: GameState, context: GameContext): void {
-      // 1. Farmers selling Grain
       const farmers = context.residentsByJob['FARMER'] || [];
       const grainLastPrice = state.resources[ResourceType.GRAIN].currentPrice;
 
@@ -96,20 +106,11 @@ export class ProductionSystem {
              }
       });
 
-      // 2. Companies selling Bread (Marginal Cost Pricing + Elasticity Markup)
       state.companies.forEach(c => {
           if (c.isBankrupt) return;
           const stock = c.inventory.finished[ProductType.BREAD] || 0;
           if (stock > 1) {
-               // Pricing Strategy: AvgCost * (1 + Markup)
-               // AvgCost is WAC. 
-               // Markup logic: If demand is high (inelastic), charge more.
-               
                const baseCost = c.avgCost > 0 ? c.avgCost : 1.5;
-               
-               // Dynamic Markup based on Inventory pressure
-               // High Inventory -> Lower Markup (or discount)
-               // Low Inventory -> High Markup
                const daysOfInventory = stock / Math.max(1, c.monthlySalesVolume / 30);
                let inventoryMarkupMod = 0;
                if (daysOfInventory > 10) inventoryMarkupMod = -0.1;
@@ -169,14 +170,10 @@ export class ProductionSystem {
     const farmers = context.residentsByJob['FARMER'] || [];
     farmers.forEach(resident => {
         const mod = getMod(ResourceType.GRAIN);
-        // Land acts as Capital (K)
         const K = resident.landTokens || 1;
-        // Intelligence acts as Productivity (A)
         const A = (resident.intelligence / 75);
-        // Labor (L) is fixed at 1 for individual farmers
         const L = 1;
         
-        // Simple Cobb-Douglas: Y = A * K^0.5 * L^0.5
         const output = 2.0 * A * Math.pow(K, 0.5) * Math.pow(L, 0.5) * mod;
         
         resident.inventory[ResourceType.GRAIN] = (resident.inventory[ResourceType.GRAIN] || 0) + output;
@@ -198,7 +195,6 @@ export class ProductionSystem {
 
       let totalWageCost = 0;
 
-      // Pay Wages
       actualWorkers.forEach(worker => {
         Transaction.transfer(company, worker, company.wageOffer, { treasury: gameState.cityTreasury, residents: gameState.population.residents, context });
         company.accumulatedCosts += company.wageOffer;
@@ -210,13 +206,10 @@ export class ProductionSystem {
         gameState.cityTreasury.dailyIncome += tax;
       });
 
-      // Production Lines
       company.productionLines.forEach(line => {
         if (!line.isActive) return;
         
         const mod = getMod(line.type);
-        
-        // --- Cobb-Douglas Production Function ---
         const ceo = context.residentMap.get(company.ceoId);
         const ceoMod = ceo ? (1 + (ceo.leadership - 50) / 200) : 1.0;
         const A = line.efficiency * ceoMod * mod;
@@ -231,7 +224,6 @@ export class ProductionSystem {
             const needed = output * 0.8;
             let currentRaw = company.inventory.raw[ResourceType.GRAIN] || 0;
             
-            // Just-In-Time Procurement
             if (currentRaw < needed && company.cash > 0) {
                 const book = gameState.market[ResourceType.GRAIN];
                 const bestAsk = book?.asks[0]?.price;
@@ -265,15 +257,9 @@ export class ProductionSystem {
         }
 
         if (actualOutput > 0) {
-            // New Inventory Valuation Logic (Weighted Average Cost - WAC)
             const oldQty = company.inventory.finished[line.type] || 0;
-            const oldCost = company.avgCost; // Current average cost per unit
-            const newTotalCost = totalWageCost + materialCost; // Marginal cost of this batch (approx)
-            
-            // Note: Fixed costs are NOT included in inventory valuation (standard accounting), 
-            // they are expensed as period costs.
-            
-            // WAC Formula: ((OldQty * OldCost) + NewBatchTotalCost) / (OldQty + NewQty)
+            const oldCost = company.avgCost; 
+            const newTotalCost = totalWageCost + materialCost; 
             const totalQty = oldQty + actualOutput;
             if (totalQty > 0) {
                 company.avgCost = ((oldQty * oldCost) + newTotalCost) / totalQty;

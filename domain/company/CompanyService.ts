@@ -1,6 +1,6 @@
 
 import { GameState } from '../../shared/types';
-import { GAME_CONFIG } from '../../shared/config';
+import { ECO_CONSTANTS } from '../../shared/config';
 
 export class CompanyService {
   static updateLifecycle(state: GameState): void {
@@ -10,7 +10,7 @@ export class CompanyService {
         
         // Stage Transitions
         if (c.stage === 'STARTUP') {
-            if (c.age > GAME_CONFIG.LIFECYCLE.STARTUP_MAX_AGE) {
+            if (c.age > ECO_CONSTANTS.LIFECYCLE.STARTUP_MAX_AGE) {
                 if (c.lastProfit > 0) c.stage = 'GROWTH';
                 else c.stage = 'DECLINE';
                 state.logs.unshift(`🏢 ${c.name} 进入 ${c.stage} 阶段`);

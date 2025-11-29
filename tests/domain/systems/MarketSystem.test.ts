@@ -1,4 +1,6 @@
 
+
+
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MarketSystem } from '../../../domain/systems/MarketSystem';
 import { INITIAL_POPULATION, INITIAL_CITY_TREASURY, INITIAL_COMPANIES, INITIAL_RESOURCES, INITIAL_PRODUCTS } from '../../../shared/initialState';
@@ -6,7 +8,7 @@ import { GameState, ResourceType, ProductType, OrderBook, BusinessCyclePhase, Ma
 
 // Helper to create empty books
 const createEmptyBook = (price: number): OrderBook => ({
-    bids: [], asks: [], lastPrice: price, history: []
+    bids: [], asks: [], lastPrice: price, history: [], volatility: 0, spread: 0
 });
 
 // Helper to create a clean mock state

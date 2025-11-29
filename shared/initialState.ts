@@ -1,4 +1,6 @@
 
+
+
 import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank, BusinessCyclePhase, MayorPersonality } from './types';
 import { GAME_CONFIG } from './config';
 
@@ -20,7 +22,7 @@ const generateResidents = (count: number): Resident[] => {
     happiness: 100, inventory: { [ResourceType.GRAIN]: 10 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'BASIC', timePreference: 0.1, needs: { [ResourceType.GRAIN]: 100 },
     landTokens: 0,
-    reservationWage: 1.5, propensityToConsume: 0.8,
+    reservationWage: 1.5, propensityToConsume: 0.8, riskAversion: 1.0,
     preferenceWeights: { [ProductType.BREAD]: 0.5, [ResourceType.GRAIN]: 0.4, savings: 0.1 }
   });
 
@@ -33,7 +35,7 @@ const generateResidents = (count: number): Resident[] => {
     happiness: 100, inventory: { [ProductType.BREAD]: 5 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'LUXURY', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 },
     landTokens: 5,
-    reservationWage: 5.0, propensityToConsume: 0.9,
+    reservationWage: 5.0, propensityToConsume: 0.9, riskAversion: 0.5,
     preferenceWeights: { [ProductType.BREAD]: 0.7, [ResourceType.GRAIN]: 0.1, savings: 0.2 }
   });
 
@@ -46,7 +48,7 @@ const generateResidents = (count: number): Resident[] => {
     happiness: 90, inventory: { [ProductType.BREAD]: 3 }, portfolio: {}, futuresPositions: [],
     livingStandard: 'COMFORT', timePreference: 0.2, needs: { [ResourceType.GRAIN]: 100 },
     landTokens: 2,
-    reservationWage: 3.0, propensityToConsume: 0.85,
+    reservationWage: 3.0, propensityToConsume: 0.85, riskAversion: 0.8,
     preferenceWeights: { [ProductType.BREAD]: 0.6, [ResourceType.GRAIN]: 0.2, savings: 0.2 }
   });
 
@@ -88,6 +90,7 @@ const generateResidents = (count: number): Resident[] => {
       landTokens: land,
       reservationWage: 1.0 + (Math.random() * 0.5),
       propensityToConsume: 0.9,
+      riskAversion: 0.8 + Math.random() * 0.4, // Random 0.8 to 1.2
       preferenceWeights: { [ProductType.BREAD]: 0.5, [ResourceType.GRAIN]: 0.4, savings: 0.1 }
     });
   }
@@ -232,7 +235,7 @@ export const INITIAL_COMPANIES: Company[] = [
     id: 'comp_grain', name: '红星农业公社',
     description: "专注于粮食种植的集体企业。",
     productionLines: [
-        { type: ResourceType.GRAIN, isActive: true, efficiency: 1.0, allocation: 1.0 } 
+        { type: ResourceType.GRAIN, isActive: true, efficiency: 1.0, allocation: 1.0, maxCapacity: 200 } 
     ],
     cash: 1000, 
     sharePrice: 1.0, totalShares: 1000, ownedShares: 0,
@@ -242,6 +245,7 @@ export const INITIAL_COMPANIES: Company[] = [
     targetEmployees: 6, 
     wageOffer: 2.0, 
     wageMultiplier: 1.8, 
+    lastWageUpdate: 0,
     pricePremium: 0,
     executiveSalary: 3.0, dividendRate: 0.1, margin: 0.2, aiPersonality: 'BALANCED',
     boardMembers: ['inst_gov'], unionTension: 0, strikeDays: 0,
@@ -260,7 +264,7 @@ export const INITIAL_COMPANIES: Company[] = [
     id: 'comp_food', name: '大众食品厂',
     description: "加工面包的工厂。",
     productionLines: [
-        { type: ProductType.BREAD, isActive: true, efficiency: 1.0, allocation: 1.0 }
+        { type: ProductType.BREAD, isActive: true, efficiency: 1.0, allocation: 1.0, maxCapacity: 150 }
     ],
     cash: 1000, 
     sharePrice: 1.0, totalShares: 1000, ownedShares: 0,
@@ -270,6 +274,7 @@ export const INITIAL_COMPANIES: Company[] = [
     targetEmployees: 5, 
     wageOffer: 2.0,
     wageMultiplier: 1.8,
+    lastWageUpdate: 0,
     pricePremium: 0,
     executiveSalary: 3.0, dividendRate: 0.1, margin: 0.2, aiPersonality: 'AGGRESSIVE',
     boardMembers: ['inst_gov'], unionTension: 0, strikeDays: 0,
@@ -289,7 +294,7 @@ export const INITIAL_COMPANIES: Company[] = [
 export const INITIAL_FUNDS: Fund[] = [];
 
 export const createEmptyBook = (price: number): OrderBook => ({
-    bids: [], asks: [], lastPrice: price, history: []
+    bids: [], asks: [], lastPrice: price, history: [], volatility: 0, spread: 0
 });
 
 const market: Record<string, OrderBook> = {};
@@ -316,7 +321,7 @@ export const INITIAL_STATE: GameState = {
     events: [],
     netWorthHistory: [{ day: 1, value: GAME_CONFIG.INITIAL_PLAYER_CASH }],
     macroHistory: [],
-    chatHistory: [{ role: 'model', text: '微型社会模拟 v9.0 (Cycles Mode) 已启动。\n系统已接入经济周期监控与健康指数。', timestamp: Date.now() }],
+    chatHistory: [{ role: 'model', text: '微型社会模拟 v10.0 (Physics Mode) 已启动。\n系统已应用：工资粘性、资本折旧、消费恐慌模型。', timestamp: Date.now() }],
     logs: ["🏗️ 系统初始化完成"],
     economicOverview: {
         totalResidentCash: 0, totalCorporateCash: 0, totalFundCash: 0, totalCityCash: 0, totalSystemGold: 0,
