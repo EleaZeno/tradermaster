@@ -1,5 +1,5 @@
 
-import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType, FlowStats, GDPFlowAccumulator } from '../../shared/types';
+import { GameState, EconomicSnapshot, ResourceType, ProductType, IndustryType, FlowStats, GDPFlowAccumulator, OrderBook } from '../../shared/types';
 
 export class GDPService {
   static process(state: GameState, flowStats: FlowStats, gdpFlow: GDPFlowAccumulator): void {
@@ -26,7 +26,8 @@ export class GDPService {
         };
     });
 
-    const unemployedCount = state.population.residents.filter(r => r.job === 'UNEMPLOYED' || (r.job === 'FARMER' && !r.employerId)).length;
+    // Fix: Farmers are Self-Employed, not Unemployed. Only count pure UNEMPLOYED.
+    const unemployedCount = state.population.residents.filter(r => r.job === 'UNEMPLOYED').length;
     const laborForce = state.population.total;
     const unemploymentRate = laborForce > 0 ? unemployedCount / laborForce : 0;
 
@@ -40,14 +41,22 @@ export class GDPService {
     // Use Accurate Flows recorded during the tick
     const gdp = gdpFlow.C + gdpFlow.I + gdpFlow.G;
 
-    // Correct M0 Calculation: Must include Bank Reserves to maintain conservation of mass under Gold Standard
+    // --- M0 Accounting (Monetary Base) ---
     const totalResidentCash = state.population.residents.reduce((s, r) => s + r.cash, 0);
     const totalCorporateCash = state.companies.reduce((s, c) => s + c.cash, 0);
     const totalFundCash = state.funds.reduce((s, f) => s + f.cash, 0);
     const totalCityCash = state.cityTreasury.cash;
     const totalReserves = state.bank.reserves;
 
-    const M0 = totalResidentCash + totalCorporateCash + totalCityCash + totalFundCash + totalReserves;
+    // Include Cash Locked in Market (Escrow for Buy Orders)
+    let totalLockedInMarket = 0;
+    Object.values(state.market).forEach((book: OrderBook) => {
+        book.bids.forEach(order => {
+            if (order.lockedValue) totalLockedInMarket += order.lockedValue;
+        });
+    });
+
+    const M0 = totalResidentCash + totalCorporateCash + totalCityCash + totalFundCash + totalReserves + totalLockedInMarket;
 
     state.macroHistory.push({
         day: state.day,
@@ -71,7 +80,7 @@ export class GDPService {
         totalCorporateCash,
         totalFundCash,
         totalCityCash,
-        totalSystemGold: M0, // Now represents the True Monetary Base
+        totalSystemGold: M0, // Correct Monetary Base
         totalInventoryValue: 0, 
         totalMarketCap: 0, 
         totalFuturesNotional: 0,

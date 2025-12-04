@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { ResourceType, ResourceItem } from '../../shared/types';
 import { useGameStore } from '../../shared/store/useGameStore';
@@ -19,7 +20,8 @@ export const FuturesPanel: React.FC<FuturesPanelProps> = ({ resources }) => {
 
     if (!player) return null;
 
-    const currentPrice = resources[selectedRes].currentPrice;
+    const currentResource = resources[selectedRes];
+    const currentPrice = currentResource ? currentResource.currentPrice : 0;
     const marginReq = 0.2; // 20%
     const contractSize = 50;
     const requiredMargin = currentPrice * contractSize * marginReq;
@@ -71,7 +73,7 @@ export const FuturesPanel: React.FC<FuturesPanelProps> = ({ resources }) => {
                                 className="flex-1" 
                                 variant="success" 
                                 onClick={() => handleTrade('LONG')}
-                                disabled={player.cash < requiredMargin}
+                                disabled={player.cash < requiredMargin || !currentResource}
                             >
                                 做多 (Long)
                             </Button>
@@ -79,7 +81,7 @@ export const FuturesPanel: React.FC<FuturesPanelProps> = ({ resources }) => {
                                 className="flex-1" 
                                 variant="danger" 
                                 onClick={() => handleTrade('SHORT')}
-                                disabled={player.cash < requiredMargin}
+                                disabled={player.cash < requiredMargin || !currentResource}
                             >
                                 做空 (Short)
                             </Button>
@@ -108,8 +110,10 @@ export const FuturesPanel: React.FC<FuturesPanelProps> = ({ resources }) => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-stone-800">
-                                {player.futuresPositions.map(pos => {
-                                    const currPrice = resources[pos.resourceId].currentPrice;
+                                {(player.futuresPositions || []).map(pos => {
+                                    const resItem = resources[pos.resourceId];
+                                    if (!resItem) return null;
+                                    const currPrice = resItem.currentPrice;
                                     const entryVal = pos.entryPrice * pos.amount;
                                     const currVal = currPrice * pos.amount;
                                     let pnl = 0;
@@ -121,7 +125,7 @@ export const FuturesPanel: React.FC<FuturesPanelProps> = ({ resources }) => {
 
                                     return (
                                         <tr key={pos.id} className="hover:bg-stone-800">
-                                            <td className="px-3 py-2 font-bold text-white">{resources[pos.resourceId].name}</td>
+                                            <td className="px-3 py-2 font-bold text-white">{resItem.name}</td>
                                             <td className="px-3 py-2">
                                                 <span className={`px-1.5 py-0.5 rounded text-[10px] ${pos.type === 'LONG' ? 'bg-emerald-900 text-emerald-400' : 'bg-red-900 text-red-400'}`}>
                                                     {pos.type}
@@ -146,7 +150,7 @@ export const FuturesPanel: React.FC<FuturesPanelProps> = ({ resources }) => {
                                         </tr>
                                     );
                                 })}
-                                {player.futuresPositions.length === 0 && (
+                                {(!player.futuresPositions || player.futuresPositions.length === 0) && (
                                     <tr>
                                         <td colSpan={7} className="text-center py-8 text-stone-600">
                                             暂无持仓

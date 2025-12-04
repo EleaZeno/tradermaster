@@ -1,5 +1,4 @@
 
-
 import { GameState, ProductType, ResourceType, FlowStats, GameContext, GDPFlowAccumulator, Resident } from '../../shared/types';
 import { MarketService } from '../market/MarketService';
 import { TransactionService } from '../finance/TransactionService';
@@ -41,7 +40,8 @@ export class ConsumerService {
       const inflationTerm = expectedInflation * 1.5; // Intertemporal substitution
       const riskTerm = unemploymentRisk * riskAversion * 2.0; // Precautionary saving
       
-      const adjustedMPC = Math.max(0.2, Math.min(0.99, baseMPC + inflationTerm - riskTerm));
+      // Allow MPC to go slightly higher to stimulate economy
+      const adjustedMPC = Math.max(0.3, Math.min(1.0, baseMPC + inflationTerm - riskTerm));
       
       const nominalBudget = resident.cash * adjustedMPC;
 
@@ -58,28 +58,37 @@ export class ConsumerService {
       let qGrain = 0;
 
       if (discretionaryIncome < 0) {
-          // SURVIVAL MODE
-          const emergencyBudget = resident.cash; 
+          // SURVIVAL MODE: Spend nearly all cash if needed
+          const emergencyBudget = resident.cash * 0.95; 
           if (isBreadCheaper) {
               qBread = emergencyBudget / Math.max(0.1, breadPrice);
           } else {
               qGrain = emergencyBudget / Math.max(0.1, grainPrice);
           }
       } else {
-          // COMFORT MODE
-          if (isBreadCheaper) qBread += (survivalNeed * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO);
-          else qGrain += survivalNeed;
+          // COMFORT MODE: Bias towards Bread as it is "higher quality"
+          // Assume Bread has higher utility weight if discretionary income exists
+          if (isBreadCheaper) {
+              qBread += (survivalNeed * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO);
+          } else {
+              // If rich enough, buy bread anyway
+              if (discretionaryIncome > costViaBread * 2) {
+                  qBread += (survivalNeed * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO);
+              } else {
+                  qGrain += survivalNeed;
+              }
+          }
 
           if (!resident.preferenceWeights) {
               resident.preferenceWeights = { 
-                  [ProductType.BREAD]: 0.6, 
-                  [ResourceType.GRAIN]: 0.3,
+                  [ProductType.BREAD]: 0.7, 
+                  [ResourceType.GRAIN]: 0.2,
                   savings: 0.1 
               };
           }
 
-          const alphaBread = resident.preferenceWeights[ProductType.BREAD] || 0.6;
-          const alphaGrain = resident.preferenceWeights[ResourceType.GRAIN] || 0.3;
+          const alphaBread = resident.preferenceWeights[ProductType.BREAD] || 0.7;
+          const alphaGrain = resident.preferenceWeights[ResourceType.GRAIN] || 0.2;
           const sumGoodsAlpha = alphaBread + alphaGrain;
 
           const spendBread = discretionaryIncome * (alphaBread / sumGoodsAlpha);

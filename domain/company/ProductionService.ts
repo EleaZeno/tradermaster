@@ -28,15 +28,21 @@ export class ProductionService {
           const fixedCost = (company.productionLines.length * ECO_CONSTANTS.ECONOMY.FIXED_COST_PER_LINE) + 
                             ((company.landTokens || 0) * ECO_CONSTANTS.ECONOMY.FIXED_COST_PER_LAND);
           
+          // Allow negative cash (Incurring Debt to Government/Suppliers)
+          // This ensures bad companies eventually hit the bankruptcy threshold (-500)
+          
           if (company.cash >= fixedCost) {
                TransactionService.transfer(company, 'TREASURY', fixedCost, { treasury: state.cityTreasury, residents: state.population.residents, context });
-               company.accumulatedCosts += fixedCost;
-               company.lastFixedCost = fixedCost;
           } else {
-               company.cash = 0; 
-               company.productionLines.forEach(l => l.efficiency *= 0.95);
+               // Force payment -> Negative Cash
+               company.cash -= fixedCost;
+               state.cityTreasury.cash += fixedCost; // Treasury assumes debt claim
+               company.productionLines.forEach(l => l.efficiency *= 0.98); // Efficiency degrades when broke
                if (company.employees > 0) company.unionTension += 5;
           }
+          
+          company.accumulatedCosts += fixedCost;
+          company.lastFixedCost = fixedCost;
       });
   }
 
@@ -87,7 +93,10 @@ export class ProductionService {
 
           if (q > 1.2 && company.cash > 200 && expectedROI > interestRate) {
               const lineType = company.productionLines[0].type;
-              company.cash -= 100;
+              
+              // Pay for Capital (to Treasury to keep money in system, representing imports or gov contracts)
+              TransactionService.transfer(company, 'TREASURY', 100, { treasury: state.cityTreasury, residents: state.population.residents, context });
+              
               gdpFlow.I += 100; 
               
               // Fresh capital is 100% efficient and has capacity 50

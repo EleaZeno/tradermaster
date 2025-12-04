@@ -11,6 +11,20 @@ const NEWS_EVENTS = [
     { headline: "工会运动", description: "工人阶级联合起来要求更高的待遇，所有企业的工资压力上升。", impactType: "NEUTRAL", target: "WAGE", modifier: 0.15 },
 ];
 
+const CODEBASE_MAP = `
+## 🗺️ Codebase Architecture Map (For Debugging Locality)
+- **Orchestrator**: \`application/GameLoop.ts\` (Main Tick Loop)
+- **Market/LOB**: \`domain/market/MarketService.ts\` (Matching Engine, Order Book)
+- **Banking/Loans**: \`domain/finance/BankingService.ts\` (Interest, Credit, Monetary Policy)
+- **Stocks/Valuation**: \`domain/finance/StockMarketService.ts\` (Price discovery, Dividends)
+- **Labor/Wages**: \`domain/labor/LaborService.ts\` (Hiring, Firing, Wage Stickiness)
+- **Production**: \`domain/company/ProductionService.ts\` (Output calc, Inventory, Spoilage)
+- **Consumption**: \`domain/consumer/ConsumerService.ts\` (Utility function, MPC, Shopping)
+- **Macro/GDP**: \`domain/macro/GDPService.ts\` (Accounting, Inflation calc)
+- **Fiscal/Gov**: \`domain/macro/FiscalService.ts\` (Taxes, Bailouts)
+- **Sanity Checks**: \`domain/analytics/SanityCheckSystem.ts\` (Conservation of Money violations)
+`;
+
 export class GeminiAdapter implements AiPort {
     private client: GoogleGenAI;
 
@@ -209,21 +223,39 @@ export class GeminiAdapter implements AiPort {
     async debugSimulation(context: string): Promise<string> {
         try {
             const systemInstruction = `
-            You are a Senior Software Engineer specializing in Agent-Based Economic Simulations.
-            Your job is to analyze a JSON snapshot of a game state and identify BUGS, LOGIC FLAWS, or IMBALANCES.
+            You are a **Senior Economic Systems Engineer**. Your role is to analyze the internal state of an Agent-Based Model (ABM) to find bugs, logical deadlocks, or economic failures.
 
-            Look for:
-            1. **Magic Numbers**: Are values pegged to arbitrary constants (e.g., exactly 100.00)?
-            2. **Explosions**: Values that are NaN, Infinity, or astronomically high/low (e.g., Price > 10000).
-            3. **Leaks**: Conservation of Money violations (e.g., SystemGold vs Sum of Cash).
-            4. **Stagnation**: Variables that should move but are static.
+            ${CODEBASE_MAP}
+
+            ### 🎯 Diagnosis Objectives:
+            1.  **Forensic Audit**: Identify why M0 (Money Conservation) might be leaking (Check 'audit' field).
+            2.  **Market Pathology**: Identify if Order Books are crossed (Bid >= Ask) or empty (Liquidity Crisis).
+            3.  **Entity Logic**: Check for "Zombie" companies (Negative Cash but not Bankrupt) or "Starving" agents.
+            4.  **Macro Deadlock**: Detect if GDP is 0 or Velocity is 0 (System Frozen).
+
+            ### 📝 Output Format (Markdown):
             
-            Return the analysis in Markdown. Be technical. Suggest code fixes if possible.
-            Respond in Chinese (Simplified).
+            ## 🛠️ System Diagnostic Report
+            
+            ### 🚨 Critical Anomalies
+            *List specific data violations (e.g., "M0 Mismatch of -50oz"). Cite specific IDs.*
+
+            ### 📉 Economic Pathology
+            *Analyze the flow of money/goods. Is there a bottleneck? Is inflation runaway?*
+
+            ### 🧩 Codebase Locality
+            *Point to the likely file (from the Map) causing the issue.*
+            - **Suspect**: \`path/to/file.ts\`
+            - **Reasoning**: ...
+
+            ### 🔧 Hotfix Recommendation
+            *Suggest a specific parameter tweak (e.g., "Lower interest rate") or logic fix.*
+
+            **Respond in Chinese (Simplified). Be technical and precise.**
             `;
 
             const prompt = `
-            DEBUG CONTEXT (JSON):
+            DEBUG CONTEXT (FULL STATE DUMP):
             ${context}
             `;
 
@@ -232,7 +264,7 @@ export class GeminiAdapter implements AiPort {
                 contents: prompt,
                 config: {
                     systemInstruction: systemInstruction,
-                    thinkingConfig: { thinkingBudget: 1024 } // Use thinking for deep logic analysis
+                    thinkingConfig: { thinkingBudget: 2048 } // Deep thinking for code path analysis
                 }
             });
 

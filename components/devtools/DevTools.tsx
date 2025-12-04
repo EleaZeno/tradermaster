@@ -1,9 +1,11 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../../shared/store/useGameStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, X, Database, Activity, FileText, FastForward, Play, Pause, Bug, Copy, Brain, RefreshCw } from 'lucide-react';
+import { Terminal, X, Database, Activity, FileText, FastForward, Play, Pause, Bug, Copy, Brain, RefreshCw, Check, AlertTriangle, Info } from 'lucide-react';
 import { aiService } from '../../infrastructure/ai/GeminiAdapter';
+import { HealthCheckService } from '../../domain/analytics/HealthCheckService';
+import { CalibrationService } from '../../features/validation/CalibrationService';
 import { OrderBook } from '../../shared/types';
 import DOMPurify from 'dompurify';
 
@@ -19,7 +21,9 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
   const [activeTab, setActiveTab] = useState<'state' | 'market' | 'events' | 'debug'>('debug');
   const [aiReport, setAiReport] = useState<string>("");
   const [analyzing, setAnalyzing] = useState(false);
-  const [copyStatus, setCopyStatus] = useState("复制上下文");
+  const [analysisStatus, setAnalysisStatus] = useState("");
+  const [copyStatus, setCopyStatus] = useState("复制完整上下文 (Copy Full Context)");
+  const [reportCopyStatus, setReportCopyStatus] = useState<string | null>(null);
   
   const gameState = useGameStore(s => s.gameState);
   const isRunning = useGameStore(s => s.isRunning);
@@ -47,31 +51,72 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
   };
 
   const getDebugContext = () => {
+      setAnalysisStatus("Gathering State Snapshot...");
+      // Calculate forensic totals
+      const totalResidentCash = gameState.population.residents.reduce((s, r) => s + r.cash, 0);
+      const totalCorporateCash = gameState.companies.reduce((s, c) => s + c.cash, 0);
+      const totalFundCash = gameState.funds.reduce((s, f) => s + f.cash, 0);
+      const totalCityCash = gameState.cityTreasury.cash;
+      const totalBankReserves = gameState.bank.reserves;
+      
+      let totalLockedInMarket = 0;
+      Object.values(gameState.market).forEach((book: OrderBook) => {
+          book.bids.forEach(order => {
+              if (order.lockedValue) totalLockedInMarket += order.lockedValue;
+          });
+      });
+
+      const calculatedM0 = totalResidentCash + totalCorporateCash + totalFundCash + totalCityCash + totalBankReserves + totalLockedInMarket;
+
+      setAnalysisStatus("Computing Health Metrics...");
+      const healthSnapshot = HealthCheckService.captureSnapshot(gameState);
+      
+      setAnalysisStatus("Validating Stylized Facts...");
+      const validation = {
+          phillips: CalibrationService.checkPhillipsCurve(gameState.macroHistory),
+          okun: CalibrationService.checkOkunsLaw(gameState.macroHistory),
+          qtm: CalibrationService.checkQuantityTheoryOfMoney(gameState.macroHistory)
+      };
+
+      setAnalysisStatus("Serializing Context...");
       return JSON.stringify({
           meta: {
               day: gameState.day,
               tick: gameState.totalTicks,
-              version: "3.1.0-Physics"
+              version: "3.2.0-Physics-Auditor",
+              timestamp: new Date().toISOString()
           },
-          anomalies: gameState.logs.filter(l => l.includes('CRITICAL') || l.includes('VIOLATION') || l.includes('NaN')),
-          macroHistory: gameState.macroHistory.slice(-20), // Last 20 data points
-          bank: gameState.bank,
+          healthIndex: gameState.economicHealth,
+          stylizedFacts: validation,
+          snapshot: healthSnapshot,
+          audit: {
+              status: Math.abs(calculatedM0 - gameState.economicOverview.totalSystemGold) < 1.0 ? "OK" : "LEAK_DETECTED",
+              calculatedM0,
+              recordedM0: gameState.economicOverview.totalSystemGold,
+              diff: calculatedM0 - gameState.economicOverview.totalSystemGold,
+              breakdown: {
+                  residents: totalResidentCash,
+                  companies: totalCorporateCash,
+                  treasury: totalCityCash,
+                  bankReserves: totalBankReserves,
+                  marketEscrow: totalLockedInMarket
+              }
+          },
+          criticalAnomalies: gameState.logs.filter(l => l.includes('[CRITICAL]') || l.includes('NaN') || l.includes('Leak')),
+          bank: {
+              ...gameState.bank,
+              loans: gameState.bank.loans.length, 
+              deposits: gameState.bank.deposits.length
+          },
           treasury: gameState.cityTreasury,
-          marketOverview: Object.entries(gameState.market).map(([k, v]) => {
-              const book = v as OrderBook;
-              return {
-                  id: k, 
-                  price: book.lastPrice,
-                  spread: book.spread,
-                  depth: book.bids.length + book.asks.length
-              };
-          }),
           companies: gameState.companies.map(c => ({
               name: c.name,
               cash: c.cash,
               profit: c.lastProfit,
               employees: c.employees,
-              isBankrupt: c.isBankrupt
+              inventory: c.inventory,
+              isBankrupt: c.isBankrupt,
+              tobinQ: c.tobinQ
           }))
       }, null, 2);
   };
@@ -79,22 +124,35 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
   const handleCopyContext = () => {
       const context = getDebugContext();
       navigator.clipboard.writeText(context).then(() => {
-          setCopyStatus("已复制!");
-          setTimeout(() => setCopyStatus("复制上下文 (Copy Context)"), 2000);
+          setCopyStatus("已复制! 粘贴给 AI");
+          setTimeout(() => setCopyStatus("复制完整上下文 (Copy Full Context)"), 2000);
+      });
+      setAnalysisStatus("");
+  };
+
+  const handleCopyReport = () => {
+      if (!aiReport) return;
+      navigator.clipboard.writeText(aiReport).then(() => {
+          setReportCopyStatus("已复制");
+          setTimeout(() => setReportCopyStatus(null), 2000);
       });
   };
 
   const handleAiDebug = async () => {
       setAnalyzing(true);
       setAiReport("");
+      
       const context = getDebugContext();
+      
+      setAnalysisStatus("Sending to Gemini 2.5 Flash...");
       try {
           const result = await aiService.debugSimulation(context);
           setAiReport(result);
       } catch (e) {
-          setAiReport("AI Analysis Failed.");
+          setAiReport("AI Analysis Failed. Check Network/API Key.");
       } finally {
           setAnalyzing(false);
+          setAnalysisStatus("");
       }
   };
 
@@ -191,37 +249,57 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
                             <div className="grid grid-cols-2 gap-4 flex-1 overflow-hidden">
                                 {/* Left: Anomaly Log */}
                                 <div className="border border-stone-800 rounded bg-stone-900/30 flex flex-col overflow-hidden">
-                                    <div className="bg-stone-900 px-3 py-2 text-red-400 font-bold text-xs border-b border-stone-800">
-                                        系统异常流 (Anomaly Stream)
+                                    <div className="bg-stone-900 px-3 py-2 text-stone-400 font-bold text-xs border-b border-stone-800 flex justify-between">
+                                        <span>系统异常流 (Anomaly Stream)</span>
+                                        <span className="text-[10px] bg-stone-800 px-1 rounded">{gameState.logs.filter(l => l.includes('[')).length} Events</span>
                                     </div>
                                     <div className="flex-1 overflow-y-auto p-2 space-y-1 font-mono text-[10px]">
-                                        {gameState.logs.filter(l => l.includes('CRITICAL') || l.includes('VIOLATION') || l.includes('NaN') || l.includes('ANOMALY')).map((log, i) => (
-                                            <div key={i} className="text-red-400 border-b border-red-900/20 pb-1 mb-1">
-                                                {log}
-                                            </div>
-                                        ))}
-                                        {gameState.logs.filter(l => l.includes('CRITICAL') || l.includes('VIOLATION') || l.includes('NaN') || l.includes('ANOMALY')).length === 0 && (
-                                            <div className="text-stone-600 italic text-center mt-10">系统运行正常，未捕获致命错误。</div>
+                                        {gameState.logs.filter(l => l.includes('[')).map((log, i) => {
+                                            const isCritical = log.includes('CRITICAL');
+                                            const isWarning = log.includes('WARNING');
+                                            return (
+                                                <div key={i} className={`pb-1 mb-1 border-b border-stone-800/50 flex gap-2 ${isCritical ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-blue-300'}`}>
+                                                    <span className="shrink-0 pt-0.5">
+                                                        {isCritical ? <AlertTriangle size={10}/> : isWarning ? <Info size={10}/> : <Activity size={10}/>}
+                                                    </span>
+                                                    <span>{log}</span>
+                                                </div>
+                                            );
+                                        })}
+                                        {gameState.logs.filter(l => l.includes('[')).length === 0 && (
+                                            <div className="text-stone-600 italic text-center mt-10">系统运行正常，未捕获异常日志。</div>
                                         )}
                                     </div>
                                 </div>
 
                                 {/* Right: AI Analysis Report */}
                                 <div className="border border-stone-800 rounded bg-stone-900/30 flex flex-col overflow-hidden relative">
-                                    <div className="bg-stone-900 px-3 py-2 text-indigo-400 font-bold text-xs border-b border-stone-800">
-                                        Gemini 诊断报告
+                                    <div className="bg-stone-900 px-3 py-2 text-indigo-400 font-bold text-xs border-b border-stone-800 flex justify-between items-center">
+                                        <span>Gemini 诊断报告 (v3.2)</span>
+                                        {aiReport && (
+                                            <button 
+                                                onClick={handleCopyReport} 
+                                                className="flex items-center gap-1 hover:text-white transition-colors"
+                                            >
+                                                {reportCopyStatus ? <Check size={10} className="text-emerald-500"/> : <Copy size={10}/>}
+                                                {reportCopyStatus || '复制报告'}
+                                            </button>
+                                        )}
                                     </div>
                                     <div className="flex-1 overflow-y-auto p-4 prose prose-invert prose-sm max-w-none">
                                         {analyzing ? (
                                             <div className="flex flex-col items-center justify-center h-full text-indigo-500 gap-2">
                                                 <RefreshCw className="animate-spin" size={24}/>
-                                                <span>正在分析 50kb 游戏状态快照...</span>
+                                                <span>正在进行深度诊断...</span>
+                                                <span className="text-xs text-indigo-400/50">{analysisStatus}</span>
                                             </div>
                                         ) : aiReport ? (
                                             renderMarkdown(aiReport)
                                         ) : (
                                             <div className="text-stone-600 italic text-center mt-10">
                                                 点击 "AI 代码逻辑审计" 让 Gemini 分析当前的经济死锁或数值溢出问题。
+                                                <br/><br/>
+                                                或者点击 "复制完整上下文" 手动粘贴给 AI 助手。
                                             </div>
                                         )}
                                     </div>
@@ -300,7 +378,7 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
                                 {gameState.logs.map((log, i) => (
                                     <div key={i} className="flex gap-2 hover:bg-stone-900 px-2 py-0.5">
                                         <span className="text-stone-600 w-8">[{i}]</span>
-                                        <span className={log.includes('!') || log.includes('CRITICAL') ? 'text-amber-400' : 'text-stone-400'}>{log}</span>
+                                        <span className={log.includes('!') || log.includes('CRITICAL') ? 'text-red-400' : 'text-stone-400'}>{log}</span>
                                     </div>
                                 ))}
                             </div>

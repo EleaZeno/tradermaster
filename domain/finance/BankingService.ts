@@ -20,7 +20,7 @@ export class BankingService {
 
         if (state.policyOverrides.interestRate !== null) {
             bank.loanRate = state.policyOverrides.interestRate;
-            bank.depositRate = Math.max(0, bank.loanRate - 0.002);
+            bank.depositRate = Math.max(0.001, bank.loanRate - 0.02); // Ensure non-zero deposit
             bank.yieldCurve = {
                 rate1d: bank.loanRate,
                 rate30d: bank.loanRate * 1.1,
@@ -31,6 +31,9 @@ export class BankingService {
 
         const strategy = this.strategies[bank.system] || this.strategies['FIAT_MONEY'];
         strategy.applyPolicy(state);
+        
+        // Ensure minimum deposit rate to encourage savings
+        bank.depositRate = Math.max(0.001, bank.loanRate * 0.5);
     }
 
     /**
@@ -44,7 +47,12 @@ export class BankingService {
         BankingService.processDeposits(state, bank, context);
         BankingService.processLoans(state, bank, context);
 
-        bank.moneySupply = bank.totalDeposits + bank.totalLoans + bank.reserves; 
+        // M2 Calculation
+        const totalResidentCash = state.population.residents.reduce((s, r) => s + r.cash, 0);
+        const totalCorporateCash = state.companies.reduce((s, c) => s + c.cash, 0);
+        const totalTreasuryCash = state.cityTreasury.cash;
+        
+        bank.moneySupply = bank.totalDeposits + totalResidentCash + totalCorporateCash + totalTreasuryCash; 
         bank.creditMultiplier = safeDivide(bank.moneySupply, Math.max(1, bank.reserves));
 
         const lastCpi = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].cpi : 0;
@@ -61,23 +69,15 @@ export class BankingService {
         if (bank.history.length > 30) bank.history.shift();
     }
 
-    /**
-     * LEGITIMATE MONEY PRINTING (Debt Monetization / QE)
-     * The ONLY place where new money should enter the system M0.
-     */
     static monetizeDebt(state: GameState, amount: number): boolean {
         if (state.bank.system === 'GOLD_STANDARD') {
-            state.logs.unshift(`🚫 央行拒绝印钞: 金本位制度限制`);
+            state.logs.unshift(`🚫 央行拒绝印钞: 金本位制度限制 (Gold Standard Blocked Minting)`);
             return false;
         }
 
         // Expand Balance Sheet
         state.bank.reserves += amount; 
-        // In a real model, Bank gains Assets (Gov Bonds) and Liabilities (Reserves)
-        // Here we simplify: Treasury gets the cash immediately
         state.cityTreasury.cash += amount;
-        
-        // Update M0 tracking immediately to pass audit
         state.economicOverview.totalSystemGold += amount;
 
         state.logs.unshift(`🖨️ 央行启动印钞机: +${Math.floor(amount)} oz (注入国库)`);
@@ -85,13 +85,16 @@ export class BankingService {
     }
 
     private static processInterest(state: GameState, bank: Bank, context: GameContext) {
+        // Fix: Divide annual rate by 365 for daily simulation
+        const dailyFactor = 1 / 365;
+
         bank.loans.forEach(loan => {
-            const interest = loan.remainingPrincipal * loan.interestRate;
+            const interest = loan.remainingPrincipal * (loan.interestRate * dailyFactor);
             loan.remainingPrincipal += interest;
         });
 
         bank.deposits.forEach(deposit => {
-            const interest = deposit.amount * deposit.interestRate;
+            const interest = deposit.amount * (deposit.interestRate * dailyFactor);
             deposit.amount += interest;
         });
     }
@@ -100,10 +103,11 @@ export class BankingService {
         const residents = state.population.residents;
         
         residents.forEach(res => {
-            const saveThreshold = 200 / (1 + bank.depositRate * 10); 
+            // Lower threshold to encourage deposits
+            const saveThreshold = 100; 
             
             const excess = res.cash - saveThreshold; 
-            if (excess > 50) {
+            if (excess > 20) {
                 let dep = bank.deposits.find(d => d.ownerId === res.id);
                 if (!dep) {
                     dep = { id: `dep_${Date.now()}_${Math.random()}`, ownerId: res.id, amount: 0, interestRate: bank.depositRate };
@@ -134,50 +138,34 @@ export class BankingService {
         });
     }
 
-    // STRICT CREDIT CHECK
     public static assessCredit(comp: Company, bank: Bank): { approved: boolean, reason: string, score: number, limit: number } {
-        // 1. Solvency: Debt to Equity
         const loans = bank.loans.filter(l => l.borrowerId === comp.id);
         const totalDebt = loans.reduce((s, l) => s + l.remainingPrincipal, 0);
         const equity = (comp.sharePrice * comp.totalShares) || 1;
         const leverage = totalDebt / equity;
-
-        // 2. Liquidity: Cash vs Short Term Obligations
-        // Simple proxy: Cash vs Interest
-        const interestLoad = totalDebt * bank.loanRate;
-        const interestCoverage = comp.lastProfit > 0 ? comp.lastProfit / Math.max(0.1, interestLoad) : 0;
-
-        // 3. Collateral (Assets)
         const assetsValue = comp.cash + (comp.landTokens || 0) * 100 + Object.values(comp.inventory.finished).reduce((a,b)=>a+(Number(b)||0)*2, 0);
         
         let score = 100;
         let reasons = [];
 
         if (comp.lastProfit < 0) {
-            score -= 30;
-            reasons.push("Negative Profit");
+            score -= 10;
         }
-        if (leverage > 2.0) {
+        if (leverage > 3.0) {
             score -= 40;
-            reasons.push("High Leverage (>2.0)");
+            reasons.push("杠杆过高 (>3.0)");
         }
-        if (comp.cash < 50) {
-            score -= 20;
-            reasons.push("Low Cash Reserves");
-        }
-        if (totalDebt > assetsValue * 0.8) {
+        if (totalDebt > assetsValue * 0.9) {
             score -= 50;
-            reasons.push("Insufficient Collateral");
+            reasons.push("抵押品不足");
         }
 
-        // Credit Limit based on Collateral
-        const creditLimit = Math.max(0, assetsValue * 0.6 - totalDebt);
-
-        const approved = score > 50 && creditLimit > 10;
+        const creditLimit = Math.max(0, assetsValue * 0.7 - totalDebt);
+        const approved = score > 40 && creditLimit > 10;
         
         return {
             approved,
-            reason: reasons.join(", ") || "Good Standing",
+            reason: reasons.join(", ") || "信用良好",
             score,
             limit: creditLimit
         };
@@ -209,35 +197,37 @@ export class BankingService {
                     if (repayment > 0) {
                         comp.cash -= repayment;
                         loan.remainingPrincipal -= repayment;
+                        
                         strategy.onLoanRepaid(bank, repayment);
+                        if (state.bank.system === 'FIAT_MONEY') {
+                             state.economicOverview.totalSystemGold -= (repayment * 0.95); 
+                        }
+
                         if (loan.remainingPrincipal <= 0.1) {
                             bank.loans = bank.loans.filter(l => l.id !== loan.id);
-                            state.logs.unshift(`🏦 ${comp.name} 还清了贷款`);
+                            state.logs.unshift(`🏦 ${comp.name} 还清了贷款 (Loan Repaid)`);
                         }
                     }
                 }
             });
 
-            // Borrowing Logic - STRICT
-            if (comp.cash < 100) {
+            // Borrowing Logic
+            if (comp.cash < 200 || (comp.stage === 'GROWTH' && comp.cash < 1000)) {
                 if (isCreditCrunch) return;
 
                 const { approved, reason, score, limit } = BankingService.assessCredit(comp, bank);
                 
-                // Update company KPI for UI
                 comp.kpis.creditScore = score;
 
                 if (approved) {
                     if (strategy.canLend(bank, 100)) {
                         const marketRate = bank.yieldCurve.rate30d + (score < 80 ? 0.02 : 0);
-                        const borrowAmount = Math.min(100, limit);
+                        const borrowAmount = Math.min(200, limit);
                         
-                        // Strict check: Is ROI > Interest?
-                        // Or is it emergency survival?
                         const expectedROI = comp.kpis.roa || 0;
-                        const desperation = comp.cash < 20;
+                        const desperation = comp.cash < 50;
 
-                        if (desperation || expectedROI > marketRate) {
+                        if (desperation || expectedROI > marketRate || comp.cash > 500) {
                             const newLoan: Loan = {
                                 id: `ln_${Date.now()}_${comp.id}`,
                                 borrowerId: comp.id,
@@ -249,7 +239,12 @@ export class BankingService {
                             bank.loans.push(newLoan);
                             strategy.onLoanIssued(bank, borrowAmount);
                             comp.cash += borrowAmount;
-                            state.logs.unshift(`🏦 ${comp.name} 获得贷款 ${Math.floor(borrowAmount)} oz (Score: ${score})`);
+                            
+                            if (state.bank.system === 'FIAT_MONEY') {
+                                state.economicOverview.totalSystemGold += borrowAmount;
+                            }
+
+                            state.logs.unshift(`🏦 ${comp.name} 获得贷款 ${Math.floor(borrowAmount)} oz (信用分: ${score})`);
                         }
                     }
                 }

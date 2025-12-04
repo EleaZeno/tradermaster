@@ -5,22 +5,11 @@ import { ECO_CONSTANTS } from '../../shared/config';
 import { safeDivide, clamp } from '../../shared/utils/math';
 
 export class LaborService {
-  /**
-   * Phase 1: Update Wages & Skills based on Macro conditions
-   * Run before Consumption (Budgets depend on expected wages)
-   */
   static updateMarketConditions(gameState: GameState): void {
-      // 1. Inflation Wage Adjustment (Sticky Wages)
       LaborService.adjustReservationWages(gameState);
-
-      // 2. Process Skills (XP Gain)
       LaborService.processSkills(gameState);
   }
 
-  /**
-   * Phase 2: Hiring/Firing and Payroll
-   * Run during Production phase
-   */
   static processPayrollAndHiring(gameState: GameState, context: GameContext, livingCostBenchmark: number, wagePressureMod: number, gdpFlow: GDPFlowAccumulator): void {
     const { companies } = gameState;
     const residents = gameState.population.residents;
@@ -31,18 +20,14 @@ export class LaborService {
       
       const companyEmployees = employeesByCompany[company.id] || [];
 
-      // Update Company Wage Policy
       LaborService.processUnionPolitics(company, companyEmployees, gameState);
       
-      // Calculate Equilibrium Wage based on Marginal Productivity
       if (!company.isPlayerFounded) {
         LaborService.adjustAIStrategy(company, companyEmployees, gameState, wagePressureMod);
       } else {
-        // For player, we just apply the manual slider/multiplier relative to benchmark
         LaborService.updatePlayerWage(company, livingCostBenchmark, gameState);
       }
 
-      // Execute Payroll
       LaborService.payExecutives(company, companyEmployees, gameState, context, gdpFlow);
       LaborService.manageHeadcount(company, companyEmployees, residents, gameState, context);
     });
@@ -69,22 +54,19 @@ export class LaborService {
       if (history.length < 2) return;
       
       const lastInflation = history[history.length - 1].inflation;
-      // Allow minor deflation without crashing, but prevent extreme negative wage spirals
       const effectiveInflation = Math.max(-0.05, lastInflation); 
 
       const sensitivity = ECO_CONSTANTS.ECONOMY.WAGE_SENSITIVITY;
       
       state.population.residents.forEach(res => {
-          // Sticky Downwards: Wages rise fast with inflation, fall slow with deflation
           const change = res.reservationWage * effectiveInflation * sensitivity;
           
           if (change > 0) {
               res.reservationWage += change; 
           } else {
-              res.reservationWage += change * 0.1; // 90% Resistance to cuts (Keynesian Stickiness)
+              res.reservationWage += change * 0.1; 
           }
           
-          // Absolute Floor
           res.reservationWage = Math.max(0.5, res.reservationWage);
       });
   }
@@ -93,7 +75,6 @@ export class LaborService {
       const workers = employees.filter(r => r.job === 'WORKER');
       const currentLeader = employees.find(r => r.job === 'UNION_LEADER');
       
-      // Election Logic
       if ((!currentLeader && workers.length > 2) || (state.day % 7 === 0 && workers.length > 2)) {
           const candidates = [...workers].sort((a, b) => {
               const scoreA = a.leadership + (100 - a.happiness);
@@ -116,7 +97,6 @@ export class LaborService {
           }
       }
 
-      // Tension Logic
       if (currentLeader) {
           if (company.wageMultiplier < 1.8) {
               company.unionTension += 5;
@@ -133,7 +113,6 @@ export class LaborService {
   private static updatePlayerWage(company: Company, benchmark: number, state: GameState): void {
     const targetMultiplier = Math.max(0.5, company.wageMultiplier || 1.5);
     const offer = parseFloat((benchmark * targetMultiplier).toFixed(2));
-    // Enforce reasonable floor even for players to prevent exploiting starving AI
     company.wageOffer = Math.max(0.1, offer);
   }
 
@@ -141,36 +120,33 @@ export class LaborService {
     const workersCount = employees.filter(r => r.job === 'WORKER').length;
     const nonWorkersCount = employees.filter(r => r.job !== 'WORKER').length;
     const stock = Object.values(company.inventory.finished).reduce((a, b) => a + (Number(b) || 0), 0);
+    const grainPrice = state.resources[ResourceType.GRAIN].currentPrice;
     
-    // 1. Hiring Strategy (Headcount)
-    if (stock > 50 && company.employees > 1) {
-        // Overproduction -> Freeze hiring or Fire
+    const isRich = company.cash > 5000;
+    
+    if (stock > 50 && company.employees > 1 && !isRich) {
         company.targetEmployees = Math.max(1, company.targetEmployees - 1);
-    } else if (stock < 15 && company.cash > 200) {
-        // Shortage + Cash -> Hire
+    } else if ((stock < 15 && company.cash > 200) || isRich) {
         company.targetEmployees++;
     }
 
-    // 2. Wage Strategy (Price of Labor)
     const target = Math.max(0, company.targetEmployees - nonWorkersCount);
     const gap = target - workersCount;
 
-    // React to labor shortage (gap > 0) OR external pressure (Events/Unions)
     const effectivePressure = wagePressure * (1 + company.unionTension / 100);
 
-    if (gap > 0 || effectivePressure > 1.05) {
-      // Raise wages to attract talent or appease union
+    if (gap > 0 || effectivePressure > 1.05 || (isRich && gap >= 0)) {
       company.wageMultiplier = Math.min(5.0, company.wageMultiplier + 0.15);
     } else if (gap < 0 || (gap === 0 && company.cash < company.wageOffer * 5)) {
-      // Lower wages if overstaffed or poor, but respect stickiness
       if (company.unionTension < 30) {
           company.wageMultiplier = Math.max(1.2, company.wageMultiplier - 0.05);
       }
     }
     
-    // Apply update
-    const grainPrice = state.resources[ResourceType.GRAIN].currentPrice;
-    company.wageOffer = parseFloat((grainPrice * company.wageMultiplier).toFixed(2));
+    let newOffer = parseFloat((grainPrice * company.wageMultiplier).toFixed(2));
+    newOffer = Math.max(newOffer, grainPrice * 1.2);
+    
+    company.wageOffer = newOffer;
   }
 
   private static payExecutives(company: Company, employees: Resident[], state: GameState, context: GameContext, gdpFlow: GDPFlowAccumulator): void {
@@ -181,7 +157,6 @@ export class LaborService {
       if (exec.job === 'UNION_LEADER') {
           salary = company.wageOffer * 1.2;
       } else {
-          // Executive salary scales with wage offer and company setting
           salary = (company.executiveSalary / 1.5) * company.wageOffer;
       }
 
@@ -201,38 +176,32 @@ export class LaborService {
     const gap = target - workers.length;
 
     // Hiring
-    if (gap > 0 && company.cash > company.wageOffer * 5) { // Need buffer for at least 5 days wages
-      // Find candidate: Farmer, Willing to work for offer, Not too happy (willing to switch)
+    if (gap > 0 && company.cash > company.wageOffer * 5) {
       const candidate = allResidents.find(r => 
           r.job === 'FARMER' && 
-          r.reservationWage <= company.wageOffer && 
-          r.happiness < 95 // Almost everyone is hireable unless ecstatic
+          r.reservationWage <= company.wageOffer
       );
       
       if (candidate) {
         candidate.job = 'WORKER';
         candidate.employerId = company.id;
-        candidate.salary = 0; // Workers get daily wage transfers, not fixed salary property
+        candidate.salary = 0; 
         company.employees++;
         
-        // Update context cache
         if (context.employeesByCompany[company.id]) context.employeesByCompany[company.id].push(candidate);
         
-        // Signing Bonus (small incentive)
         TransactionService.transfer(company, candidate, company.wageOffer * 0.5, { treasury: state.cityTreasury, residents: allResidents, context });
       }
     } 
     // Firing
     else if (gap < 0) {
-      // Optimization: Sort workers by Skill (Ascending) then Happiness (Descending)
-      // Fire Novice before Expert.
       const skillRank = { 'NOVICE': 1, 'SKILLED': 2, 'EXPERT': 3 };
       
       const workerToFire = workers.sort((a, b) => {
           const sA = skillRank[a.skill] || 1;
           const sB = skillRank[b.skill] || 1;
-          if (sA !== sB) return sA - sB; // Lower skill first
-          return b.happiness - a.happiness; // Fire happier people? Or unhappy? Let's say we fire high happiness people as they are more resilient? No, usually LIFO or Performance. Here: Skill based.
+          if (sA !== sB) return sA - sB; 
+          return b.happiness - a.happiness; 
       })[0];
 
       if (workerToFire) {
@@ -240,14 +209,11 @@ export class LaborService {
         workerToFire.employerId = undefined;
         company.employees = Math.max(0, company.employees - 1);
         
-        // Update context cache
         const idx = context.employeesByCompany[company.id]?.indexOf(workerToFire);
         if (idx > -1) context.employeesByCompany[company.id].splice(idx, 1);
         
-        // Severance Pay (2 days wages)
         TransactionService.transfer(company, workerToFire, company.wageOffer * 2, { treasury: state.cityTreasury, residents: allResidents, context });
         
-        // Morale Hit
         workerToFire.happiness = Math.max(0, workerToFire.happiness - 20);
         state.logs.unshift(`🔥 ${company.name} 解雇了 ${workerToFire.name} (${workerToFire.skill})`);
       }

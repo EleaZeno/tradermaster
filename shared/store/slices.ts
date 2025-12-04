@@ -2,8 +2,8 @@
 import { StateCreator } from 'zustand';
 import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure, PolicyOverrides, MonetarySystemType, LandPlot } from '../types';
 import { INITIAL_STATE } from '../initialState';
-import { processGameTick } from '../../domain/gameLogic';
-import { MarketSystem } from '../../domain/systems/MarketSystem';
+import { processGameTick } from '../../application/GameLoop';
+import { MarketService } from '../../domain/market/MarketService';
 import { checkAchievements, ACHIEVEMENTS } from '../../services/achievementService';
 
 export interface UISlice {
@@ -114,7 +114,7 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
     let quantity = isRes ? 10 : 1;
     const prevCash = playerRes.cash;
 
-    MarketSystem.submitOrder(state.gameState, {
+    MarketService.submitOrder(state.gameState, {
       ownerId: playerRes.id,
       ownerType: 'RESIDENT',
       itemId: itemId,
@@ -150,6 +150,9 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
 
     if (player && player.cash >= margin) {
       player.cash -= margin;
+      // Transfer margin to Treasury to maintain M0 conservation
+      state.gameState.cityTreasury.cash += margin;
+      
       state.gameState.cash = player.cash;
       const contract: FuturesContract = {
         id: `fut_${Date.now()}`, 
@@ -159,8 +162,14 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
         entryPrice: res.currentPrice, 
         dueDate: state.gameState.day + 7 
       };
+      
+      // Fix: Ensure array exists for legacy saves
+      if (!player.futuresPositions) player.futuresPositions = [];
       player.futuresPositions.push(contract);
+      
+      if (!state.gameState.futures) state.gameState.futures = [];
       state.gameState.futures.push(contract);
+      
       state.gameState.logs.unshift(`📜 开仓 ${type} ${res.name} (保证金: ${Math.floor(margin)} oz)`);
       triggerEffect('expense', margin, 'Margin');
     }
@@ -168,7 +177,7 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
 
   closeFuture: (contractId) => set((state) => {
       const player = state.gameState.population.residents.find(r => r.isPlayer);
-      if (!player) return;
+      if (!player || !player.futuresPositions) return;
 
       const idx = player.futuresPositions.findIndex(f => f.id === contractId);
       if (idx !== -1) {
@@ -184,10 +193,23 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
           const margin = contract.entryPrice * contract.amount * 0.2;
           const payout = margin + pnl;
           
-          player.cash += payout;
+          // Payout comes from Treasury (Clearing House)
+          if (state.gameState.cityTreasury.cash >= payout) {
+              state.gameState.cityTreasury.cash -= payout;
+              player.cash += payout;
+          } else {
+              // Emergency minting if treasury empty (Edge case)
+              state.gameState.bank.reserves += payout;
+              state.gameState.economicOverview.totalSystemGold += payout;
+              player.cash += payout;
+              state.gameState.logs.unshift(`🏦 交易所流动性不足，央行垫付交割款`);
+          }
+
           state.gameState.cash = player.cash;
           
           player.futuresPositions.splice(idx, 1);
+          
+          if (!state.gameState.futures) state.gameState.futures = [];
           state.gameState.futures = state.gameState.futures.filter(f => f.id !== contractId);
           
           state.gameState.logs.unshift(`💰 平仓期货: 盈亏 ${pnl.toFixed(1)} oz`);
@@ -202,6 +224,9 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
       
       if (player && plot && !plot.ownerId && player.cash >= plot.price) {
           player.cash -= plot.price;
+          // Land purchase proceeds go to Treasury
+          state.gameState.cityTreasury.cash += plot.price;
+          
           state.gameState.cash = player.cash;
           plot.ownerId = player.id;
           plot.isForSale = false;
@@ -222,7 +247,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     const prevCash = player.cash;
 
     if (!isFund) {
-      MarketSystem.submitOrder(state.gameState, {
+      MarketService.submitOrder(state.gameState, {
         ownerId: player.id,
         ownerType: 'RESIDENT',
         itemId: id,
@@ -246,7 +271,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     if (!player) return;
     const prevCash = player.cash;
 
-    MarketSystem.submitOrder(state.gameState, {
+    MarketService.submitOrder(state.gameState, {
       ownerId: player.id,
       ownerType: 'RESIDENT',
       itemId: id,
@@ -269,7 +294,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     if (!player) return;
     const prevCash = player.cash;
 
-    MarketSystem.submitOrder(state.gameState, {
+    MarketService.submitOrder(state.gameState, {
       ownerId: player.id,
       ownerType: 'RESIDENT',
       itemId: id,
@@ -282,7 +307,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     state.gameState.cash = player.cash;
     const gain = player.cash - prevCash;
     if (gain > 0) triggerEffect('income', gain, 'oz (Short)');
-    state.gameState.logs.unshift(`📉 做空 (Short) ${id} - 100股`);
+    state.gameState.logs.unshift(`📈 做空 (Short) ${id} - 100股`);
   }),
 
   coverStock: (id, isFund) => set((state) => {
@@ -290,7 +315,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     if (!player) return;
     const prevCash = player.cash;
 
-    MarketSystem.submitOrder(state.gameState, {
+    MarketService.submitOrder(state.gameState, {
       ownerId: player.id,
       ownerType: 'RESIDENT',
       itemId: id,
@@ -303,7 +328,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     state.gameState.cash = player.cash;
     const cost = prevCash - player.cash;
     if (cost > 0) triggerEffect('expense', cost, 'oz (Cover)');
-    state.gameState.logs.unshift(`📈 平仓 (Cover) ${id} + 100股`);
+    state.gameState.logs.unshift(`📉 平仓 (Cover) ${id} + 100股`);
   }),
 
   setLivingStandard: (level) => set((state) => {
@@ -320,6 +345,9 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
 
     if (playerRes && playerRes.cash >= IPO_COST) {
       playerRes.cash -= IPO_COST;
+      // IPO Cost goes to Treasury (Registration fee)
+      state.gameState.cityTreasury.cash += IPO_COST;
+      
       playerRes.portfolio[newId] = 1000;
       playerRes.job = 'EXECUTIVE';
       playerRes.employerId = newId;
@@ -374,33 +402,47 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
     const comp = state.gameState.companies.find(c => c.id === compId);
     if (!comp || comp.cash < 20) return;
     const totalDiv = comp.cash * 0.5;
-    comp.cash -= totalDiv;
     const perShare = totalDiv / comp.totalShares;
 
+    // Distribute to ALL shareholders, not just player, to maintain conservation
+    comp.cash -= totalDiv;
+    
+    let playerAmt = 0;
     comp.shareholders.forEach(s => {
-      if (s.type === 'PLAYER') {
-        const p = state.gameState.population.residents.find(r => r.isPlayer);
-        if (p) { 
-            const amt = s.count * perShare;
-            p.cash += amt; 
-            state.gameState.cash = p.cash; 
-            triggerEffect('income', amt, 'Dividend');
-        }
+      const amt = s.count * perShare;
+      if (s.type === 'PLAYER' || s.type === 'RESIDENT') {
+          const recipient = state.gameState.population.residents.find(r => r.id === s.id);
+          if (recipient) recipient.cash += amt;
+          if (s.type === 'PLAYER') playerAmt = amt;
+      }
+      // Institutional shareholders' cash disappears or goes to treasury (assume Treasury for conservation)
+      if (s.type === 'INSTITUTION') {
+          state.gameState.cityTreasury.cash += amt;
       }
     });
+
+    const player = state.gameState.population.residents.find(r => r.isPlayer);
+    if (player) state.gameState.cash = player.cash;
+
     state.gameState.logs.unshift(`💸 ${comp.name} 分红 ${totalDiv.toFixed(0)} oz`);
-    state.gameState.notifications.push({
-         id: `div_${Date.now()}`,
-         message: `${comp.name} 发放分红，你获得了 ${(totalDiv/comp.totalShares * (comp.shareholders.find(s=>s.type === 'PLAYER')?.count || 0)).toFixed(2)} oz`,
-         type: 'success',
-         timestamp: Date.now()
-    });
+    if (playerAmt > 0) {
+        triggerEffect('income', playerAmt, 'Dividend');
+        state.gameState.notifications.push({
+             id: `div_${Date.now()}`,
+             message: `${comp.name} 发放分红，你获得了 ${playerAmt.toFixed(2)} oz`,
+             type: 'success',
+             timestamp: Date.now()
+        });
+    }
   }),
 
   addLine: (compId, type) => set((state) => {
     const comp = state.gameState.companies.find(c => c.id === compId);
     if (comp && comp.cash > 100) {
       comp.cash -= 100;
+      // Capital purchase -> Treasury
+      state.gameState.cityTreasury.cash += 100;
+      
       comp.productionLines.push({ type, isActive: true, efficiency: 0.8, allocation: 0.2, maxCapacity: 50 });
       comp.productionLines.forEach(l => l.allocation = 1 / comp.productionLines.length);
     }
@@ -476,4 +518,3 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
     }
   }),
 });
-    

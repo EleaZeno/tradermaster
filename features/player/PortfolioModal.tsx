@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useGameStore } from '../../shared/store/useGameStore';
 import { Card, Button } from '../../shared/components';
@@ -41,8 +42,10 @@ export const PortfolioModal: React.FC<PortfolioModalProps> = ({ onClose }) => {
   // Futures PnL (Unrealized)
   let futuresPnL = 0;
   let futuresMargin = 0;
-  player.futuresPositions.forEach(f => {
-      const curr = resources[f.resourceId].currentPrice;
+  (player.futuresPositions || []).forEach(f => {
+      const resItem = resources[f.resourceId];
+      if (!resItem) return;
+      const curr = resItem.currentPrice;
       const val = f.amount * curr;
       const entry = f.amount * f.entryPrice;
       if (f.type === 'LONG') futuresPnL += (val - entry);

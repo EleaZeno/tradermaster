@@ -1,7 +1,8 @@
 
-import { GameState, GameContext, MayorPersonality, BusinessCyclePhase } from '../../shared/types';
+import { GameState, GameContext, MayorPersonality, BusinessCyclePhase, ResourceType } from '../../shared/types';
 import { TransactionService } from '../finance/TransactionService';
 import { BankingService } from '../finance/BankingService';
+import { MarketService } from '../market/MarketService';
 import { GAME_CONFIG } from '../../shared/config';
 
 export class FiscalService {
@@ -23,7 +24,7 @@ export class FiscalService {
 
       // 1. Determine Welfare Budget
       const deputy = context.residentsByJob['DEPUTY_MAYOR']?.[0];
-      let welfareBudget = 30; // Base
+      let welfareBudget = 30; 
       
       if (personality === MayorPersonality.POPULIST) welfareBudget = 100;
       if (personality === MayorPersonality.AUSTRIAN) welfareBudget = 5;
@@ -34,9 +35,27 @@ export class FiscalService {
       }
       treasury.taxPolicy.grainSubsidy = welfareBudget;
 
-      // 2. Personality-Driven Fiscal Response
-      
-      // CRISIS TRIGGER (Independent of personality usually, but response differs)
+      // 2. Strategic Reserves (Government Spending 'G')
+      if (treasury.cash > 2000 && hoardingRatio > 0.1) {
+          const grainBook = state.market[ResourceType.GRAIN];
+          const price = grainBook.lastPrice;
+          const buyAmount = Math.floor((treasury.cash * 0.05) / price); 
+          
+          if (buyAmount > 0) {
+              MarketService.submitOrder(state, {
+                  ownerId: 'TREASURY', 
+                  ownerType: 'TREASURY',
+                  itemId: ResourceType.GRAIN,
+                  side: 'BUY',
+                  type: 'MARKET',
+                  price: 0,
+                  quantity: buyAmount
+              }, context);
+              actionLog += `🏛️ 战略收储 (G): ${buyAmount} 粮食; `;
+          }
+      }
+
+      // 3. Personality-Driven Fiscal Response
       const lastGdp = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].gdp : 100;
       const isCrisis = lastGdp < 10 || cycle === BusinessCyclePhase.DEPRESSION;
 
@@ -44,8 +63,7 @@ export class FiscalService {
           const isGoldStandard = state.bank.system === 'GOLD_STANDARD';
 
           if (personality === MayorPersonality.AUSTRIAN) {
-              // Austrian: Do nothing, let prices fall
-              actionLog += "【萧条】市长拒绝干预市场 (Austrian)";
+              actionLog += "【萧条】市长拒绝干预市场 (奥地利学派)";
               status = 'AUSTERITY';
           } else {
               // Stimulus Attempt
@@ -53,12 +71,10 @@ export class FiscalService {
               const bailoutNeeded = 1000;
               let fundingSecured = false;
 
-              // Check if Treasury has cash
               if (treasury.cash >= bailoutNeeded) {
                   fundingSecured = true;
                   actionLog += "【紧急】使用国库盈余救市; ";
               } else {
-                  // Treasury broke: Try to print via Central Bank
                   if (!isGoldStandard) {
                       const success = BankingService.monetizeDebt(state, bailoutNeeded);
                       if (success) {
@@ -73,7 +89,6 @@ export class FiscalService {
               }
               
               if (fundingSecured) {
-                  // Distribute to Poor
                   const poor = state.population.residents.filter(r => r.cash < 5);
                   if (poor.length > 0) {
                       const amount = bailoutNeeded / poor.length;
@@ -82,13 +97,12 @@ export class FiscalService {
                       });
                       actionLog += `直升机撒钱 (Helicopter Money); `;
                   } else {
-                       // Corporate bailout
                        state.companies.forEach(c => {
                            if (c.cash < 100 && !c.isBankrupt) {
                                TransactionService.transfer('TREASURY', c, 200, { treasury, residents: state.population.residents, context });
                            }
                        });
-                       actionLog += `企业纾困注资 (Corporate Bailout); `;
+                       actionLog += `企业纾困注资 (Bailout); `;
                   }
               }
           }
@@ -96,38 +110,32 @@ export class FiscalService {
       // NORMAL CYCLE MANAGEMENT
       else {
           if (personality === MayorPersonality.KEYNESIAN) {
-              // Counter-cyclical
               if (cycle === BusinessCyclePhase.RECESSION || cycle === BusinessCyclePhase.RECOVERY) {
                   status = 'STIMULUS';
                   FiscalService.adjustTax(state, -0.01);
-                  actionLog += "逆周期刺激 (Keynesian)";
+                  actionLog += "逆周期刺激 (凯恩斯主义)";
               } else if (cycle === BusinessCyclePhase.PEAK) {
                   status = 'AUSTERITY';
                   FiscalService.adjustTax(state, +0.01);
-                  actionLog += "冷却过热经济 (Keynesian)";
+                  actionLog += "冷却过热经济";
               }
           } 
           else if (personality === MayorPersonality.POPULIST) {
               status = 'STIMULUS';
               if (treasury.taxPolicy.incomeTaxRate > 0.05) FiscalService.adjustTax(state, -0.02);
-              
-              // Run deficit if needed
               if (treasury.cash < 50 && state.bank.system !== 'GOLD_STANDARD') {
                   BankingService.monetizeDebt(state, 500);
-                  actionLog += "赤字开支 (Populist)";
+                  actionLog += "赤字开支 (民粹主义)";
               }
           } 
           
-          // WEALTH REDISTRIBUTION LOGIC (Prevents Infinite Treasury Accumulation)
           if (hoardingRatio > 0.15) {
               status = 'STIMULUS';
-              
-              // Gradually lower taxes
               if (treasury.taxPolicy.incomeTaxRate > 0.05) FiscalService.adjustTax(state, -0.005);
               
-              // Direct Transfer (Citizens Dividend)
+              // Only do Citizen Dividend if surplus is HUGE
               const surplus = treasury.cash - (M0 * 0.10); 
-              if (surplus > 100) {
+              if (surplus > 500) { // Increased threshold
                   const residents = state.population.residents;
                   const perCapita = surplus / residents.length;
                   residents.forEach(r => {
@@ -140,12 +148,37 @@ export class FiscalService {
           } else if (personality === MayorPersonality.AUSTRIAN && hoardingRatio < 0.05) {
               status = 'AUSTERITY';
               FiscalService.adjustTax(state, +0.01);
-              actionLog += "平衡预算 (Austrian)";
+              actionLog += "平衡预算";
           }
       }
 
+      // Execute Welfare Payments (The missing link)
+      FiscalService.processWelfare(state, context);
+
       state.cityTreasury.fiscalStatus = status;
       state.cityTreasury.fiscalCorrection = actionLog;
+  }
+
+  private static processWelfare(state: GameState, context: GameContext) {
+      // Basic Income for Extreme Poverty
+      const treasury = state.cityTreasury;
+      if (treasury.cash < 10) return;
+
+      const povertyLine = 5;
+      const poor = state.population.residents.filter(r => r.cash < povertyLine && r.job !== 'MAYOR');
+      
+      const subsidy = state.cityTreasury.taxPolicy.grainSubsidy; // e.g. 30 total budget
+      if (poor.length === 0 || subsidy <= 0) return;
+
+      const amountPerPerson = Math.min(5, subsidy / poor.length); // Cap at 5oz per person per day
+      const totalNeeded = amountPerPerson * poor.length;
+
+      if (treasury.cash >= totalNeeded) {
+          poor.forEach(r => {
+              TransactionService.transfer('TREASURY', r, amountPerPerson, { treasury, residents: state.population.residents, context });
+          });
+          state.cityTreasury.dailyExpense += totalNeeded;
+      }
   }
 
   private static adjustTax(state: GameState, delta: number) {

@@ -41,7 +41,7 @@ export class CompanyService {
             roi: 0.1, 
             leverage: equity > 0 ? (assets - equity) / equity : 0,
             marketShare: 0,
-            creditScore: c.kpis.creditScore // Preserved from BankingService update
+            creditScore: c.kpis.creditScore
         };
     });
   }
@@ -84,7 +84,6 @@ export class CompanyService {
               const badLoans = state.bank.loans.filter(l => l.borrowerId === comp.id);
               badLoans.forEach(l => {
                   state.bank.totalLoans -= l.remainingPrincipal;
-                  // Bank Equity hit (Implicit)
               });
               state.bank.loans = state.bank.loans.filter(l => l.borrowerId !== comp.id);
           }
@@ -105,11 +104,9 @@ export class CompanyService {
       if (richResidents.length > 0) {
           const founder = richResidents[Math.floor(Math.random() * richResidents.length)];
           
-          // Determine best sector based on prices
           const grainPrice = state.resources[ResourceType.GRAIN].currentPrice;
           const breadPrice = state.products[ProductType.BREAD].marketPrice;
           
-          // Simple heuristic: If Bread > 2x Grain, Bread is profitable. Else Grain.
           const type = breadPrice > grainPrice * 2.5 ? ProductType.BREAD : ResourceType.GRAIN;
           const name = `${founder.name} ${type === ResourceType.GRAIN ? '农场' : '工坊'}`;
           
@@ -146,7 +143,6 @@ export class CompanyService {
           founder.portfolio[newId] = 1000;
           
           state.companies.push(newComp);
-          // Init Market Book
           state.market[newId] = { bids: [], asks: [], lastPrice: 1.0, history: [], volatility: 0, spread: 0 };
           
           state.logs.unshift(`🚀 新股上市: ${name} (由 ${founder.name} 创立)`);
@@ -159,4 +155,3 @@ export class CompanyService {
       });
   }
 }
-    
