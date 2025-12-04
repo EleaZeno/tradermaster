@@ -5,6 +5,7 @@ import { RESOURCE_ICONS } from '../../shared/assets';
 import { Card } from '../../shared/components';
 import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
 import { CommodityModal } from './CommodityModal';
+import { FuturesPanel } from './FuturesPanel'; // Import added
 import { useGameStore } from '../../shared/store/useGameStore';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -49,11 +50,11 @@ export const CommoditiesTab: React.FC = () => {
   const allItems = [...Object.values(resources), ...Object.values(products)] as (ResourceItem | ProductItem)[];
 
   return (
-    <div className="space-y-8 animate-in fade-in">
+    <div className="space-y-8 animate-in fade-in pb-10">
       <div>
         <h3 className="text-xl font-bold text-stone-100 mb-4 flex items-center gap-2">
             <span className="bg-emerald-600 w-2 h-6 rounded-full"></span>
-            商品现货 (Commodities)
+            商品现货 (Spot Commodities)
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {allItems.map((item) => {
@@ -96,6 +97,10 @@ export const CommoditiesTab: React.FC = () => {
               </Card>
           )})}
         </div>
+      </div>
+
+      <div className="border-t border-stone-800 pt-6">
+          <FuturesPanel resources={resources} />
       </div>
 
       {selectedItem && (

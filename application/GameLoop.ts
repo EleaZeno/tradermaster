@@ -1,6 +1,4 @@
 
-
-
 import { GameState, ResourceType, ProductType, FlowStats, GameContext, GDPFlowAccumulator } from '../shared/types';
 import { GameContextFactory } from '../shared/utils/GameContextFactory';
 import { LaborService } from '../domain/labor/LaborService';
@@ -11,6 +9,7 @@ import { ConsumerService } from '../domain/consumer/ConsumerService';
 import { StockMarketService } from '../domain/finance/StockMarketService';
 import { BankingService } from '../domain/finance/BankingService';
 import { MarketService } from '../domain/market/MarketService';
+import { DerivativesService } from '../domain/market/DerivativesService'; // Import added
 import { EventService } from '../domain/events/EventService';
 import { DemographicsService } from '../domain/demographics/DemographicsService';
 import { GDPService } from '../domain/macro/GDPService';
@@ -60,6 +59,10 @@ const runDailyPipeline = (state: GameState, context: GameContext) => {
     
     measure('eco-labor-hire', () => LaborService.processPayrollAndHiring(state, context, grainPriceBenchmark, wageMod, gdpFlow));
     measure('eco-production', () => ProductionService.process(state, context, flowStats, eventModifier, gdpFlow));
+    
+    // Derivatives Processing (Settlement & Liquidation)
+    measure('eco-derivatives', () => DerivativesService.process(state));
+
     measure('eco-banking-ops', () => BankingService.processFinancials(state, context));
 
     measure('eco-lifecycle', () => {

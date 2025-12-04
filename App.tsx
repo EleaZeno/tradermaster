@@ -13,6 +13,7 @@ import { ValidationTab } from './features/validation/ValidationTab';
 import { ChatWidget } from './components/ChatWidget';
 import { CompanyModal } from './features/companies/CompanyModal';
 import { CreateCompanyModal } from './features/companies/CreateCompanyModal';
+import { PortfolioModal } from './features/player/PortfolioModal'; // Import added
 import { aiService } from './infrastructure/ai/GeminiAdapter';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { FloatingTextLayer } from './components/ui/FloatingTextLayer';
@@ -20,7 +21,7 @@ import { DevTools } from './components/devtools/DevTools';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from './shared/store/useGameStore';
 import { getTranslation } from './shared/utils/i18n';
-import { Wheat, Building2, BarChart3, Landmark, Beaker, Briefcase, Plus, Settings, TrendingUp, Home, PieChart, Cpu, Activity, LayoutDashboard, Coins } from 'lucide-react';
+import { Wheat, Building2, BarChart3, Landmark, Beaker, Briefcase, Plus, Settings, TrendingUp, Home, PieChart, Cpu, Activity, LayoutDashboard, Coins, Wallet } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 const App: React.FC = () => {
@@ -39,6 +40,7 @@ const App: React.FC = () => {
   
   const [activeTab, setActiveTab] = useState<'dashboard' | 'banking' | 'validation' | 'commodities' | 'companies' | 'cityhall'>('dashboard');
   const [showCreateCompany, setShowCreateCompany] = useState(false);
+  const [showPortfolio, setShowPortfolio] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
   const [showDevTools, setShowDevTools] = useState(false);
 
@@ -141,7 +143,15 @@ const App: React.FC = () => {
                           <Plus size={14} />
                       </button>
                   </div>
-                  <div className="space-y-2 max-h-[150px] overflow-y-auto custom-scrollbar pr-1">
+                  
+                  <button 
+                    onClick={() => setShowPortfolio(true)}
+                    className="w-full bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs py-2 px-3 rounded flex items-center gap-2 mb-3 border border-stone-700 transition-colors"
+                  >
+                      <Wallet size={12} className="text-blue-400"/> 查看我的资产
+                  </button>
+
+                  <div className="space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar pr-1">
                       {myCompanies.map(c => (
                           <div 
                             key={c.id}
@@ -242,6 +252,12 @@ const App: React.FC = () => {
             companyId={selectedCompanyId} 
             onClose={() => setSelectedCompanyId(null)}
             />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPortfolio && (
+            <PortfolioModal onClose={() => setShowPortfolio(false)} />
         )}
       </AnimatePresence>
     </div>

@@ -18,6 +18,7 @@ export interface UISlice {
 export interface MarketSlice {
   trade: (action: 'buy' | 'sell', itemId: IndustryType) => void;
   buyFutures: (resId: ResourceType, type: 'LONG' | 'SHORT') => void;
+  closeFuture: (contractId: string) => void;
 }
 
 export interface PlayerSlice {
@@ -142,21 +143,61 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
   buyFutures: (resId, type) => set((state) => {
     const res = state.gameState.resources[resId];
     const player = state.gameState.population.residents.find(r => r.isPlayer);
-    const amount = 50;
-    const margin = res.currentPrice * amount * 0.2;
+    const amount = 50; 
+    const marginReq = 0.2; // 20% margin = 5x leverage
+    const margin = res.currentPrice * amount * marginReq;
 
     if (player && player.cash >= margin) {
       player.cash -= margin;
       state.gameState.cash = player.cash;
       const contract: FuturesContract = {
-        id: `fut_${Date.now()}`, resourceId: resId, type, amount, entryPrice: res.currentPrice, dueDate: state.gameState.day + 7
+        id: `fut_${Date.now()}`, 
+        resourceId: resId, 
+        type, 
+        amount, 
+        entryPrice: res.currentPrice, 
+        dueDate: state.gameState.day + 7 // 7 Day Expiry
       };
       player.futuresPositions.push(contract);
       state.gameState.futures.push(contract);
-      state.gameState.logs.unshift(`📜 开仓 ${type} ${res.name}`);
+      state.gameState.logs.unshift(`📜 开仓 ${type} ${res.name} (保证金: ${Math.floor(margin)} oz)`);
       triggerEffect('expense', margin, 'Margin');
     }
   }),
+
+  closeFuture: (contractId) => set((state) => {
+      const player = state.gameState.population.residents.find(r => r.isPlayer);
+      if (!player) return;
+
+      const idx = player.futuresPositions.findIndex(f => f.id === contractId);
+      if (idx !== -1) {
+          const contract = player.futuresPositions[idx];
+          const currentPrice = state.gameState.resources[contract.resourceId].currentPrice;
+          
+          const entryVal = contract.entryPrice * contract.amount;
+          const exitVal = currentPrice * contract.amount;
+          let pnl = 0;
+          if (contract.type === 'LONG') pnl = exitVal - entryVal;
+          else pnl = entryVal - exitVal;
+
+          // Return Margin + PnL
+          // Initial Margin was 20% of Entry. 
+          // Simplified: We assume initial margin is sunk into 'cash' changes, so we just return (Margin + PnL)
+          // Actually, in buyFutures we deducted Margin. So now we return Margin + PnL.
+          const margin = contract.entryPrice * contract.amount * 0.2;
+          const payout = margin + pnl;
+          
+          player.cash += payout;
+          state.gameState.cash = player.cash;
+          
+          player.futuresPositions.splice(idx, 1);
+          state.gameState.futures = state.gameState.futures.filter(f => f.id !== contractId);
+          
+          state.gameState.logs.unshift(`💰 平仓期货: 盈亏 ${pnl.toFixed(1)} oz`);
+          if (pnl > 0) triggerEffect('income', payout, 'PnL');
+          else triggerEffect('expense', Math.abs(pnl), 'Loss');
+      }
+  })
 });
 
 export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never]], [], PlayerSlice> = (set) => ({
