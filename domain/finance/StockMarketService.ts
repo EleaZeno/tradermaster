@@ -1,5 +1,6 @@
 
 import { GameState } from '../../shared/types';
+import { TransactionService } from './TransactionService';
 
 export class StockMarketService {
   static processStockMarket(state: GameState): void {
@@ -8,6 +9,35 @@ export class StockMarketService {
           comp.sharePrice = Math.max(0.01, comp.sharePrice * 0.95);
           return;
         }
+
+        // --- 1. Automatic Dividend Policy (Fix for Cash Hoarding) ---
+        // If company has too much cash (e.g., > 3 months of wages + buffer), distribute it.
+        const monthlyWageBill = comp.employees * comp.wageOffer * 30;
+        const safeBuffer = Math.max(500, monthlyWageBill * 3); // Keep 3 months runway or 500oz
+        
+        if (!comp.isPlayerFounded && comp.cash > safeBuffer) {
+            const excessCash = comp.cash - safeBuffer;
+            const dividendAmount = excessCash * 0.5; // Payout 50% of excess
+            
+            if (dividendAmount > 10) {
+                comp.cash -= dividendAmount;
+                const perShare = dividendAmount / comp.totalShares;
+                
+                // Distribute to shareholders
+                comp.shareholders.forEach(shareholder => {
+                    if (shareholder.type === 'RESIDENT' || shareholder.type === 'PLAYER') {
+                        const resident = state.population.residents.find(r => r.id === shareholder.id);
+                        if (resident) {
+                            resident.cash += shareholder.count * perShare;
+                        }
+                    }
+                    // Institutional/Fund shareholders would get cash here too if implemented
+                });
+                
+                state.logs.unshift(`💸 ${comp.name} 发放分红 ${Math.floor(dividendAmount)} oz (盈余回馈)`);
+            }
+        }
+        // -----------------------------------------------------------
 
         const eps = comp.lastProfit / comp.totalShares;
         const bookValue = comp.cash / comp.totalShares; 

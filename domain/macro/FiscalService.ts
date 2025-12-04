@@ -1,6 +1,7 @@
 
 import { GameState, GameContext, MayorPersonality, BusinessCyclePhase } from '../../shared/types';
 import { TransactionService } from '../finance/TransactionService';
+import { BankingService } from '../finance/BankingService';
 import { GAME_CONFIG } from '../../shared/config';
 
 export class FiscalService {
@@ -40,29 +41,55 @@ export class FiscalService {
       const isCrisis = lastGdp < 10 || cycle === BusinessCyclePhase.DEPRESSION;
 
       if (isCrisis) {
+          const isGoldStandard = state.bank.system === 'GOLD_STANDARD';
+
           if (personality === MayorPersonality.AUSTRIAN) {
-              // Austrian: Do nothing, let the rot clear out
-              actionLog += "【萧条】市长拒绝干预市场; ";
+              // Austrian: Do nothing, let prices fall
+              actionLog += "【萧条】市长拒绝干预市场 (Austrian)";
               status = 'AUSTERITY';
           } else {
-              // Stimulus for others
+              // Stimulus Attempt
               status = 'STIMULUS';
-              const bailout = 1000;
-              treasury.cash += bailout;
-              state.economicOverview.totalSystemGold += bailout; 
-              
-              const poor = state.population.residents.filter(r => r.cash < 5);
-              const amount = poor.length > 0 ? bailout / poor.length : 0;
-              
-              if (amount > 0) {
-                  poor.forEach(r => {
-                      TransactionService.transfer('TREASURY', r, amount, { treasury, residents: state.population.residents, context });
-                  });
-                  actionLog += `【紧急】市长直升机撒钱; `;
+              const bailoutNeeded = 1000;
+              let fundingSecured = false;
+
+              // Check if Treasury has cash
+              if (treasury.cash >= bailoutNeeded) {
+                  fundingSecured = true;
+                  actionLog += "【紧急】使用国库盈余救市; ";
               } else {
-                   // Corporate bailout
-                   state.companies.forEach(c => c.cash += 200);
-                   actionLog += `【紧急】企业纾困注资; `;
+                  // Treasury broke: Try to print via Central Bank
+                  if (!isGoldStandard) {
+                      const success = BankingService.monetizeDebt(state, bailoutNeeded);
+                      if (success) {
+                          fundingSecured = true;
+                          actionLog += "【紧急】债务货币化 (QE); ";
+                      } else {
+                          actionLog += "【失败】央行拒绝融资; ";
+                      }
+                  } else {
+                      actionLog += "【萧条】金本位限制：国库空虚且无法印钞; ";
+                  }
+              }
+              
+              if (fundingSecured) {
+                  // Distribute to Poor
+                  const poor = state.population.residents.filter(r => r.cash < 5);
+                  if (poor.length > 0) {
+                      const amount = bailoutNeeded / poor.length;
+                      poor.forEach(r => {
+                          TransactionService.transfer('TREASURY', r, amount, { treasury, residents: state.population.residents, context });
+                      });
+                      actionLog += `直升机撒钱 (Helicopter Money); `;
+                  } else {
+                       // Corporate bailout
+                       state.companies.forEach(c => {
+                           if (c.cash < 100 && !c.isBankrupt) {
+                               TransactionService.transfer('TREASURY', c, 200, { treasury, residents: state.population.residents, context });
+                           }
+                       });
+                       actionLog += `企业纾困注资 (Corporate Bailout); `;
+                  }
               }
           }
       } 
@@ -81,27 +108,39 @@ export class FiscalService {
               }
           } 
           else if (personality === MayorPersonality.POPULIST) {
-              // Always spend, low tax
               status = 'STIMULUS';
               if (treasury.taxPolicy.incomeTaxRate > 0.05) FiscalService.adjustTax(state, -0.02);
               
-              // Run deficit if needed (borrowing not implemented fully, so just print/burn reserves)
-              if (treasury.cash < 50) {
-                  treasury.cash += 500; // Silent monetization of debt
-                  state.economicOverview.totalSystemGold += 500;
+              // Run deficit if needed
+              if (treasury.cash < 50 && state.bank.system !== 'GOLD_STANDARD') {
+                  BankingService.monetizeDebt(state, 500);
                   actionLog += "赤字开支 (Populist)";
               }
           } 
-          else {
-              // Austrian / Neutral: Target Surplus
-              if (hoardingRatio < 0.1) {
-                  status = 'AUSTERITY';
-                  FiscalService.adjustTax(state, +0.01);
-                  actionLog += "平衡预算 (Austrian)";
-              } else if (hoardingRatio > 0.3) {
-                  status = 'NEUTRAL';
-                  FiscalService.adjustTax(state, -0.005);
+          
+          // WEALTH REDISTRIBUTION LOGIC (Prevents Infinite Treasury Accumulation)
+          if (hoardingRatio > 0.15) {
+              status = 'STIMULUS';
+              
+              // Gradually lower taxes
+              if (treasury.taxPolicy.incomeTaxRate > 0.05) FiscalService.adjustTax(state, -0.005);
+              
+              // Direct Transfer (Citizens Dividend)
+              const surplus = treasury.cash - (M0 * 0.10); 
+              if (surplus > 100) {
+                  const residents = state.population.residents;
+                  const perCapita = surplus / residents.length;
+                  residents.forEach(r => {
+                      TransactionService.transfer('TREASURY', r, perCapita, { treasury, residents, context });
+                  });
+                  actionLog += `全民分红 ${Math.floor(surplus)} oz`;
+              } else {
+                  actionLog += "逐步降税 (盈余过高)";
               }
+          } else if (personality === MayorPersonality.AUSTRIAN && hoardingRatio < 0.05) {
+              status = 'AUSTERITY';
+              FiscalService.adjustTax(state, +0.01);
+              actionLog += "平衡预算 (Austrian)";
           }
       }
 

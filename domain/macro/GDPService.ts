@@ -28,7 +28,7 @@ export class GDPService {
 
     const unemployedCount = state.population.residents.filter(r => r.job === 'UNEMPLOYED' || (r.job === 'FARMER' && !r.employerId)).length;
     const laborForce = state.population.total;
-    const unemploymentRate = unemployedCount / laborForce;
+    const unemploymentRate = laborForce > 0 ? unemployedCount / laborForce : 0;
 
     const grainPrice = state.resources[ResourceType.GRAIN].currentPrice;
     const breadPrice = state.products[ProductType.BREAD].marketPrice;
@@ -40,8 +40,14 @@ export class GDPService {
     // Use Accurate Flows recorded during the tick
     const gdp = gdpFlow.C + gdpFlow.I + gdpFlow.G;
 
-    // Approximated M2 is in bank.moneySupply, but calculate raw cash M0 too
-    const M0 = state.economicOverview.totalResidentCash + state.economicOverview.totalCorporateCash + state.economicOverview.totalCityCash + state.economicOverview.totalFundCash;
+    // Correct M0 Calculation: Must include Bank Reserves to maintain conservation of mass under Gold Standard
+    const totalResidentCash = state.population.residents.reduce((s, r) => s + r.cash, 0);
+    const totalCorporateCash = state.companies.reduce((s, c) => s + c.cash, 0);
+    const totalFundCash = state.funds.reduce((s, f) => s + f.cash, 0);
+    const totalCityCash = state.cityTreasury.cash;
+    const totalReserves = state.bank.reserves;
+
+    const M0 = totalResidentCash + totalCorporateCash + totalCityCash + totalFundCash + totalReserves;
 
     state.macroHistory.push({
         day: state.day,
@@ -55,18 +61,20 @@ export class GDPService {
         cpi: parseFloat(cpi.toFixed(2)),
         inflation: parseFloat(inflation.toFixed(4)),
         unemployment: parseFloat(unemploymentRate.toFixed(4)),
-        moneySupply: parseFloat(state.bank.moneySupply.toFixed(0))
+        moneySupply: parseFloat(state.bank.moneySupply.toFixed(0)) // M2 roughly
     });
 
     if (state.macroHistory.length > 365) state.macroHistory.shift();
 
     state.economicOverview = {
-        totalResidentCash: state.population.residents.reduce((s, r) => s + r.cash, 0),
-        totalCorporateCash: state.companies.reduce((s, c) => s + c.cash, 0),
-        totalFundCash: state.funds.reduce((s, f) => s + f.cash, 0),
-        totalCityCash: state.cityTreasury.cash,
-        totalSystemGold: M0, 
-        totalInventoryValue: 0, totalMarketCap: 0, totalFuturesNotional: 0,
+        totalResidentCash,
+        totalCorporateCash,
+        totalFundCash,
+        totalCityCash,
+        totalSystemGold: M0, // Now represents the True Monetary Base
+        totalInventoryValue: 0, 
+        totalMarketCap: 0, 
+        totalFuturesNotional: 0,
         inventoryAudit: audit
     };
   }

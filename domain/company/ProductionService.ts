@@ -164,19 +164,19 @@ export class ProductionService {
       ([ResourceType.GRAIN, ProductType.BREAD] as IndustryType[]).forEach(type => {
         const amount = resident.inventory[type] || 0;
         const loss = applySpoilage(amount, type, false);
-        if (loss > 0) resident.inventory[type] = amount - loss;
+        if (loss > 0) resident.inventory[type] = Math.max(0, amount - loss);
       });
     });
 
     gameState.companies.forEach(company => {
         const rawGrain = company.inventory.raw[ResourceType.GRAIN] || 0;
         const grainLoss = applySpoilage(rawGrain, ResourceType.GRAIN, true);
-        if (grainLoss > 0) company.inventory.raw[ResourceType.GRAIN] = rawGrain - grainLoss;
+        if (grainLoss > 0) company.inventory.raw[ResourceType.GRAIN] = Math.max(0, rawGrain - grainLoss);
 
         ([ResourceType.GRAIN, ProductType.BREAD] as IndustryType[]).forEach(type => {
             const amount = company.inventory.finished[type] || 0;
             const loss = applySpoilage(amount, type, true);
-            if (loss > 0) company.inventory.finished[type] = amount - loss;
+            if (loss > 0) company.inventory.finished[type] = Math.max(0, amount - loss);
         });
     });
   }
@@ -289,7 +289,10 @@ export class ProductionService {
             
             const consumed = actualOutput * 0.8;
             if (consumed > 0) {
-                company.inventory.raw[ResourceType.GRAIN] = (company.inventory.raw[ResourceType.GRAIN] || 0) - consumed;
+                // Safety Clamp for Floating Point Errors
+                const newRaw = Math.max(0, (company.inventory.raw[ResourceType.GRAIN] || 0) - consumed);
+                company.inventory.raw[ResourceType.GRAIN] = newRaw;
+                
                 flowStats[ResourceType.GRAIN].consumed += consumed;
                 materialCost += consumed * gameState.resources[ResourceType.GRAIN].currentPrice; 
             }

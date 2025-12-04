@@ -1,6 +1,4 @@
 
-
-
 import { GoogleGenAI } from "@google/genai";
 import { GameState, GodModeData, ResourceType, ProductType, Company, NewsEvent, EconomicHealthSnapshot } from "../../shared/types";
 import { AiPort } from "../../domain/ports/AiPort";
@@ -205,6 +203,43 @@ export class GeminiAdapter implements AiPort {
             return response.text || "诊断服务无响应。";
         } catch (error) {
             return "诊断连接失败。";
+        }
+    }
+
+    async debugSimulation(context: string): Promise<string> {
+        try {
+            const systemInstruction = `
+            You are a Senior Software Engineer specializing in Agent-Based Economic Simulations.
+            Your job is to analyze a JSON snapshot of a game state and identify BUGS, LOGIC FLAWS, or IMBALANCES.
+
+            Look for:
+            1. **Magic Numbers**: Are values pegged to arbitrary constants (e.g., exactly 100.00)?
+            2. **Explosions**: Values that are NaN, Infinity, or astronomically high/low (e.g., Price > 10000).
+            3. **Leaks**: Conservation of Money violations (e.g., SystemGold vs Sum of Cash).
+            4. **Stagnation**: Variables that should move but are static.
+            
+            Return the analysis in Markdown. Be technical. Suggest code fixes if possible.
+            Respond in Chinese (Simplified).
+            `;
+
+            const prompt = `
+            DEBUG CONTEXT (JSON):
+            ${context}
+            `;
+
+            const response = await this.client.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    systemInstruction: systemInstruction,
+                    thinkingConfig: { thinkingBudget: 1024 } // Use thinking for deep logic analysis
+                }
+            });
+
+            return response.text || "Debug analysis failed.";
+        } catch (error) {
+            console.error(error);
+            return "Debugger AI offline.";
         }
     }
 

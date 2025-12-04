@@ -224,7 +224,17 @@ export class LaborService {
     } 
     // Firing
     else if (gap < 0) {
-      const workerToFire = workers[0]; // LIFO or performance based? currently simple
+      // Optimization: Sort workers by Skill (Ascending) then Happiness (Descending)
+      // Fire Novice before Expert.
+      const skillRank = { 'NOVICE': 1, 'SKILLED': 2, 'EXPERT': 3 };
+      
+      const workerToFire = workers.sort((a, b) => {
+          const sA = skillRank[a.skill] || 1;
+          const sB = skillRank[b.skill] || 1;
+          if (sA !== sB) return sA - sB; // Lower skill first
+          return b.happiness - a.happiness; // Fire happier people? Or unhappy? Let's say we fire high happiness people as they are more resilient? No, usually LIFO or Performance. Here: Skill based.
+      })[0];
+
       if (workerToFire) {
         workerToFire.job = 'FARMER';
         workerToFire.employerId = undefined;
@@ -239,7 +249,7 @@ export class LaborService {
         
         // Morale Hit
         workerToFire.happiness = Math.max(0, workerToFire.happiness - 20);
-        state.logs.unshift(`🔥 ${company.name} 解雇了 ${workerToFire.name}`);
+        state.logs.unshift(`🔥 ${company.name} 解雇了 ${workerToFire.name} (${workerToFire.skill})`);
       }
     }
   }

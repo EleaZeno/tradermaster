@@ -47,6 +47,7 @@ const createMockState = (): GameState => ({
         [ResourceType.GRAIN]: createEmptyBook(1.0),
         [ProductType.BREAD]: createEmptyBook(2.0)
     },
+    map: [],
     achievements: [],
     notifications: [],
     settings: {

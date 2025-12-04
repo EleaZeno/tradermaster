@@ -10,10 +10,11 @@ import { StatsTab } from './features/stats/StatsTab';
 import { CityHallTab } from './features/cityhall/CityHallTab';
 import { BankingTab } from './features/banking/BankingTab';
 import { ValidationTab } from './features/validation/ValidationTab';
+import { MapPanel } from './features/map/MapPanel';
 import { ChatWidget } from './components/ChatWidget';
 import { CompanyModal } from './features/companies/CompanyModal';
 import { CreateCompanyModal } from './features/companies/CreateCompanyModal';
-import { PortfolioModal } from './features/player/PortfolioModal'; // Import added
+import { PortfolioModal } from './features/player/PortfolioModal'; 
 import { aiService } from './infrastructure/ai/GeminiAdapter';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { FloatingTextLayer } from './components/ui/FloatingTextLayer';
@@ -21,7 +22,7 @@ import { DevTools } from './components/devtools/DevTools';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from './shared/store/useGameStore';
 import { getTranslation } from './shared/utils/i18n';
-import { Wheat, Building2, BarChart3, Landmark, Beaker, Briefcase, Plus, Settings, TrendingUp, Home, PieChart, Cpu, Activity, LayoutDashboard, Coins, Wallet } from 'lucide-react';
+import { Wheat, Building2, BarChart3, Landmark, Beaker, Plus, TrendingUp, Cpu, Activity, LayoutDashboard, Coins, Wallet, Map as MapIcon } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 const App: React.FC = () => {
@@ -38,7 +39,7 @@ const App: React.FC = () => {
   
   const myCompanies = useGameStore(useShallow(s => s.gameState.companies.filter(c => c.isPlayerFounded)));
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'banking' | 'validation' | 'commodities' | 'companies' | 'cityhall'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'map' | 'banking' | 'validation' | 'commodities' | 'companies' | 'cityhall'>('dashboard');
   const [showCreateCompany, setShowCreateCompany] = useState(false);
   const [showPortfolio, setShowPortfolio] = useState(false);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
@@ -121,6 +122,7 @@ const App: React.FC = () => {
                   </div>
                   <NavItem id="commodities" label={t('nav.commodities')} icon={Wheat} />
                   <NavItem id="companies" label={t('nav.companies')} icon={BarChart3} />
+                  <NavItem id="map" label="城市规划" icon={MapIcon} />
                   
                   <div className="my-4 border-t border-stone-800 mx-3"></div>
 
@@ -195,6 +197,7 @@ const App: React.FC = () => {
                         transition={{ duration: 0.2 }}
                     >
                         {activeTab === 'dashboard' && <StatsTab />}
+                        {activeTab === 'map' && <MapPanel />}
                         {activeTab === 'commodities' && <CommoditiesTab />}
                         {activeTab === 'companies' && <CompaniesTab onSelectCompany={setSelectedCompanyId} />}
                         {activeTab === 'banking' && <BankingTab />}
@@ -212,17 +215,14 @@ const App: React.FC = () => {
                     <button className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'dashboard' ? 'text-blue-400 bg-blue-950/30' : 'text-stone-500'}`} onClick={() => setActiveTab('dashboard')}>
                         <LayoutDashboard size={20}/>
                     </button>
-                    <button className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'commodities' ? 'text-emerald-400 bg-emerald-950/30' : 'text-stone-500'}`} onClick={() => setActiveTab('commodities')}>
-                        <Wheat size={20}/>
+                    <button className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'map' ? 'text-emerald-400 bg-emerald-950/30' : 'text-stone-500'}`} onClick={() => setActiveTab('map')}>
+                        <MapIcon size={20}/>
                     </button>
                     <button className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'companies' ? 'text-purple-400 bg-purple-950/30' : 'text-stone-500'}`} onClick={() => setActiveTab('companies')}>
-                        <Building2 size={20}/>
+                        <BarChart3 size={20}/>
                     </button>
                     <button className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'banking' ? 'text-amber-400 bg-amber-950/30' : 'text-stone-500'}`} onClick={() => setActiveTab('banking')}>
                         <Coins size={20}/>
-                    </button>
-                    <button className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'validation' ? 'text-pink-400 bg-pink-950/30' : 'text-stone-500'}`} onClick={() => setActiveTab('validation')}>
-                        <Beaker size={20}/>
                     </button>
                 </div>
             </div>
@@ -265,3 +265,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+    

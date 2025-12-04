@@ -15,7 +15,8 @@ export type LivingStandard = 'SURVIVAL' | 'BASIC' | 'COMFORT' | 'LUXURY';
 
 export enum CompanyType {
   CORPORATION = 'CORPORATION',
-  COOPERATIVE = 'COOPERATIVE'
+  COOPERATIVE = 'COOPERATIVE',
+  BANK = 'BANK' // New: Private Banks
 }
 
 export enum WageStructure {
@@ -24,7 +25,7 @@ export enum WageStructure {
   PERFORMANCE = 'PERFORMANCE'
 }
 
-export type LifecycleStage = 'STARTUP' | 'GROWTH' | 'MATURITY' | 'DECLINE';
+export type LifecycleStage = 'STARTUP' | 'GROWTH' | 'MATURITY' | 'DECLINE' | 'LIQUIDATED';
 
 export type SkillLevel = 'NOVICE' | 'SKILLED' | 'EXPERT';
 
@@ -40,9 +41,23 @@ export enum BusinessCyclePhase {
 }
 
 export enum MayorPersonality {
-  KEYNESIAN = 'KEYNESIAN', // Stimulus focused, Counter-cyclical
-  AUSTRIAN = 'AUSTRIAN',   // Balanced budget, Laissez-faire
-  POPULIST = 'POPULIST'    // High spending, Low tax (Deficit bias)
+  KEYNESIAN = 'KEYNESIAN', 
+  AUSTRIAN = 'AUSTRIAN',   
+  POPULIST = 'POPULIST'    
+}
+
+// --- MAP & LAND ---
+export type PlotType = 'RESIDENTIAL' | 'AGRICULTURAL' | 'INDUSTRIAL' | 'COMMERCIAL';
+
+export interface LandPlot {
+  id: string;
+  x: number;
+  y: number;
+  type: PlotType;
+  ownerId: string | null; // null = Government/Public
+  price: number;
+  isForSale: boolean;
+  efficiencyBonus: number;
 }
 // -----------------
 
@@ -151,12 +166,11 @@ export interface Resident {
   happiness: number;
   livingStandard: LivingStandard; 
   timePreference: number; 
-  riskAversion: number; // New: 0.5 to 1.5, affects MPC under uncertainty
+  riskAversion: number; 
   
-  // Utility Preferences (Cobb-Douglas weights)
   preferenceWeights: {
-      [key in IndustryType]?: number; // Alpha for goods
-  } & { savings: number }; // Alpha for future consumption
+      [key in IndustryType]?: number;
+  } & { savings: number }; 
   
   reservationWage: number;
   propensityToConsume: number; 
@@ -166,7 +180,7 @@ export interface Resident {
   futuresPositions: FuturesPosition[]; 
   politicalStance: 'CAPITALIST' | 'SOCIALIST' | 'CENTRIST';
   influence: number; 
-  landTokens?: number;
+  landTokens?: number; // Legacy support, mapped to plots
 }
 
 export interface PopulationState {
@@ -214,17 +228,18 @@ export interface Shareholder {
 export interface ProductionLine {
   type: IndustryType;
   isActive: boolean;
-  efficiency: number; // Represents 'A' (Total Factor Productivity)
+  efficiency: number; 
   allocation: number; 
-  maxCapacity: number; // New: Constraint
+  maxCapacity: number; 
 }
 
 export interface CompanyKPIs {
-    roe: number; // Return on Equity
-    roa: number; // Return on Assets
-    roi: number; // Return on Investment (Project specific)
-    leverage: number; // Debt / Equity
+    roe: number; 
+    roa: number; 
+    roi: number; 
+    leverage: number; 
     marketShare: number; 
+    creditScore: number; // New: 0-100
 }
 
 export interface Company {
@@ -250,7 +265,7 @@ export interface Company {
   
   wageOffer: number;      
   wageMultiplier: number; 
-  lastWageUpdate: number; // New: For Sticky Wages
+  lastWageUpdate: number; 
 
   pricePremium: number; 
   executiveSalary: number; 
@@ -265,8 +280,8 @@ export interface Company {
     raw: Partial<Record<ResourceType, number>>;
     finished: Partial<Record<IndustryType, number>>;
   };
-  landTokens?: number; // Represents 'K' (Capital)
-  avgCost: number; // WAC (Weighted Average Cost)
+  landTokens?: number;
+  avgCost: number; 
   lastFixedCost: number; 
   accumulatedRevenue: number;
   accumulatedCosts: number;
@@ -415,10 +430,11 @@ export interface Order {
     side: OrderSide;
     type: OrderType;
     price: number; 
-    quantity: number; // Replaces 'amount'
-    remainingQuantity: number; // New: explicit tracking
+    quantity: number; 
+    remainingQuantity: number; 
     status: OrderStatus;
     timestamp: number;
+    lockedValue?: number; 
 }
 
 export interface Trade {
@@ -430,18 +446,18 @@ export interface Trade {
 }
 
 export interface OrderBook {
-    bids: Order[]; // Sorted Price Descending
-    asks: Order[]; // Sorted Price Ascending
+    bids: Order[]; 
+    asks: Order[]; 
     lastPrice: number;
     history: Trade[];
-    volatility: number; // New: Volatility Metric
-    spread: number; // New: Bid-Ask Spread
+    volatility: number; 
+    spread: number; 
 }
 
 export interface MacroMetric {
   day: number;
-  gdp: number;         // Nominal GDP = C + I + G + NetX
-  components: {        // New: Breakdown
+  gdp: number;         
+  components: {        
       c: number;
       i: number;
       g: number;
@@ -475,14 +491,13 @@ export interface GameSettings {
 }
 
 export interface PolicyOverrides {
-  interestRate: number | null; // Fixed rate if not null (0-1)
-  moneyPrinter: number; // Amount to inject daily
-  migrationRate: number; // Multiplier (1.0 default)
-  taxMultiplier: number; // Multiplier (1.0 default)
-  minWage: number; // Wage floor
+  interestRate: number | null; 
+  moneyPrinter: number; 
+  migrationRate: number; 
+  taxMultiplier: number; 
+  minWage: number; 
 }
 
-// --- NEW INTERFACE FOR HEALTH SCORE ---
 export interface EconomicHealth {
   score: number; // 0-100
   stability: number;
@@ -491,7 +506,6 @@ export interface EconomicHealth {
   liquidity: number;
   equality: number;
 }
-// --------------------------------------
 
 export interface EconomicHealthSnapshot {
   timestamp: number;
@@ -501,13 +515,13 @@ export interface EconomicHealthSnapshot {
     inflation_rate: number;
     unemployment_rate: number;
     money_supply_m2: number;
-    money_velocity_est: number; // GDP / M2
+    money_velocity_est: number; 
   };
   markets: Record<string, {
     price: number;
     spread: number;
-    buy_pressure: number; // Total bid vol
-    sell_pressure: number; // Total ask vol
+    buy_pressure: number; 
+    sell_pressure: number; 
     inventory_market: number;
   }>;
   companies: {
@@ -522,14 +536,14 @@ export interface EconomicHealthSnapshot {
     avg_wage: number;
     labor_demand_openings: number;
     labor_supply_unemployed: number;
-    productivity_avg: number; // GDP / Employed
-    wage_share_gdp: number; // Total Wages / GDP
+    productivity_avg: number; 
+    wage_share_gdp: number; 
   };
   finance: {
     interest_rate: number;
-    yield_curve_slope: number; // 1Y - 1D
+    yield_curve_slope: number; 
     total_debt: number;
-    leverage_ratio: number; // Debt / Equity
+    leverage_ratio: number; 
     reserves_ratio: number;
   };
 }
@@ -537,10 +551,10 @@ export interface EconomicHealthSnapshot {
 export interface GameState {
   cash: number; 
   day: number;
-  totalTicks: number; // Optimization: Track engine ticks separate from days
+  totalTicks: number; 
   mayorId: string | null;
   cityTreasury: CityTreasury;
-  bank: Bank; // Central Bank
+  bank: Bank; 
   election: Election;
   population: PopulationState;
   resources: Record<ResourceType, ResourceItem>;
@@ -550,22 +564,21 @@ export interface GameState {
   futures: FuturesPosition[];
   events: MarketEvent[];
   netWorthHistory: { day: number; value: number }[];
-  macroHistory: MacroMetric[]; // Updated to track stylized facts data
+  macroHistory: MacroMetric[]; 
   chatHistory: ChatMessage[];
   logs: string[];
   economicOverview: EconomicSnapshot; 
   market: Record<string, OrderBook>;
   
   // New features
+  map: LandPlot[]; // NEW: Map Data
   achievements: AchievementState[];
   notifications: Notification[];
   settings: GameSettings;
-  
-  // Lab & Advanced Systems
   policyOverrides: PolicyOverrides;
-  businessCycle: BusinessCyclePhase; // NEW
-  mayorPersonality: MayorPersonality; // NEW
-  economicHealth: EconomicHealth; // NEW
+  businessCycle: BusinessCyclePhase; 
+  mayorPersonality: MayorPersonality; 
+  economicHealth: EconomicHealth; 
 }
 
 export interface AgentAdvice {
@@ -599,3 +612,4 @@ export interface GameContext {
     employeesByCompany: Record<string, Resident[]>;
     residentsByJob: Record<string, Resident[]>;
 }
+    

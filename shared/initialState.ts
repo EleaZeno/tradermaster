@@ -1,9 +1,8 @@
 
-
-
-import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank, BusinessCyclePhase, MayorPersonality } from './types';
+import { Resident, Shareholder, PopulationState, CityTreasury, Election, Candle, ResourceType, ResourceItem, ProductType, ProductItem, Company, CompanyType, WageStructure, Fund, GameState, OrderBook, Bank, BusinessCyclePhase, MayorPersonality, LandPlot } from './types';
 import { GAME_CONFIG } from './config';
 
+// ... (Previous Residents Generation Code remains same) ...
 const generateResidents = (count: number): Resident[] => {
   const residents: Resident[] = [];
   const names = [
@@ -100,6 +99,7 @@ const generateResidents = (count: number): Resident[] => {
 
 const initialResidents = generateResidents(GAME_CONFIG.TOTAL_POPULATION);
 
+// ... (Shareholder distribution logic same) ...
 const distributeInitialShares = (residents: Resident[]): Shareholder[] => {
     let remainingShares = 1000;
     const shareholders: Shareholder[] = [];
@@ -141,6 +141,7 @@ initialResidents.forEach(res => {
     if (s2) res.portfolio['comp_food'] = s2.count;
 });
 
+// ... (Initial Constants) ...
 export const INITIAL_POPULATION: PopulationState = {
   residents: initialResidents,
   total: GAME_CONFIG.TOTAL_POPULATION,
@@ -255,7 +256,7 @@ export const INITIAL_COMPANIES: Company[] = [
     lastFixedCost: 0,
     tobinQ: 1.0,
     age: 120, stage: 'MATURITY',
-    kpis: { roe: 0.1, roa: 0.08, roi: 0.12, leverage: 0.2, marketShare: 0.6 },
+    kpis: { roe: 0.1, roa: 0.08, roi: 0.12, leverage: 0.2, marketShare: 0.6, creditScore: 85 },
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.05, 20),
     type: CompanyType.COOPERATIVE, wageStructure: WageStructure.FLAT, ceoId: 'res_3', isBankrupt: false
@@ -284,7 +285,7 @@ export const INITIAL_COMPANIES: Company[] = [
     lastFixedCost: 0,
     tobinQ: 1.0,
     age: 60, stage: 'GROWTH',
-    kpis: { roe: 0.15, roa: 0.1, roi: 0.2, leverage: 0.5, marketShare: 0.4 },
+    kpis: { roe: 0.15, roa: 0.1, roi: 0.2, leverage: 0.5, marketShare: 0.4, creditScore: 70 },
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.1, 20),
     type: CompanyType.CORPORATION, wageStructure: WageStructure.HIERARCHICAL, ceoId: 'res_5', isBankrupt: false
@@ -303,6 +304,33 @@ market[ProductType.BREAD] = createEmptyBook(2.0);
 INITIAL_COMPANIES.forEach(c => {
     market[c.id] = createEmptyBook(c.sharePrice);
 });
+
+// --- GENERATE MAP ---
+const generateMap = (): LandPlot[] => {
+    const plots: LandPlot[] = [];
+    const size = 6; // 6x6 grid
+    for(let x=0; x<size; x++) {
+        for(let y=0; y<size; y++) {
+            const isResource = Math.random() > 0.6;
+            plots.push({
+                id: `plot_${x}_${y}`,
+                x, y,
+                type: isResource ? 'AGRICULTURAL' : 'RESIDENTIAL',
+                ownerId: null, // Public
+                price: isResource ? 200 : 100,
+                isForSale: true,
+                efficiencyBonus: 1.0 + Math.random() * 0.5
+            });
+        }
+    }
+    // Assign some plots to existing companies
+    const grainComp = INITIAL_COMPANIES.find(c => c.id === 'comp_grain');
+    if(grainComp) {
+        const plot = plots.find(p => p.type === 'AGRICULTURAL');
+        if(plot) { plot.ownerId = grainComp.id; plot.isForSale = false; grainComp.landTokens = 1; }
+    }
+    return plots;
+};
 
 export const INITIAL_STATE: GameState = {
     cash: GAME_CONFIG.INITIAL_PLAYER_CASH,
@@ -329,6 +357,7 @@ export const INITIAL_STATE: GameState = {
         inventoryAudit: {}
     },
     market: market,
+    map: generateMap(), // New
     achievements: [],
     notifications: [],
     settings: {
@@ -353,3 +382,4 @@ export const INITIAL_STATE: GameState = {
         score: 100, stability: 100, productivity: 50, debtRisk: 0, liquidity: 100, equality: 80
     }
 };
+    

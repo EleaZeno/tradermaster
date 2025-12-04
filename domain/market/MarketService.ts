@@ -1,8 +1,7 @@
 
-
 import { GameState, Order, OrderBook, GameContext, Trade, ResourceType, ProductType, OrderType, OrderSide } from '../../shared/types';
 
-const MAX_MATCH_DEPTH = 50; // Prevent infinite loops or UI freeze on huge orders
+const MAX_MATCH_DEPTH = 50; 
 
 export class MarketService {
   
@@ -12,7 +11,7 @@ export class MarketService {
    */
   static submitOrder(
       state: GameState, 
-      order: Omit<Order, 'id' | 'remainingQuantity' | 'status' | 'timestamp'>,
+      order: Omit<Order, 'id' | 'remainingQuantity' | 'status' | 'timestamp' | 'lockedValue'>,
       context?: GameContext
   ): boolean {
       // 1. Validation
@@ -20,20 +19,20 @@ export class MarketService {
       if (order.quantity <= 0) return false;
       if (!order.ownerId) return false;
 
-      // 2. Asset Locking (Escrow)
-      // We delegate this to the AssetLocker to keep the service clean
-      if (!MarketService.AssetLocker.lock(state, order, context)) {
-          return false;
-      }
-
       const fullOrder: Order = {
           ...order,
           id: `ord_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           quantity: order.quantity,
           remainingQuantity: order.quantity,
           status: 'PENDING',
-          timestamp: state.day
+          timestamp: state.day,
+          lockedValue: 0
       };
+
+      // 2. Asset Locking (Escrow)
+      if (!MarketService.AssetLocker.lock(state, fullOrder, context)) {
+          return false;
+      }
 
       // 3. Initialize Book if needed
       if (!state.market[order.itemId]) {
@@ -48,8 +47,6 @@ export class MarketService {
       bookSide.push(fullOrder);
       
       // 5. Strict Sorting: Price Priority, then Time Priority
-      // Bids: Descending Price (High to Low)
-      // Asks: Ascending Price (Low to High)
       if (isBuy) {
           bookSide.sort((a, b) => b.price - a.price || a.timestamp - b.timestamp);
       } else {
@@ -119,7 +116,6 @@ export class MarketService {
           const bestBid = book.bids[0].price;
           const bestAsk = book.asks[0].price;
           book.spread = bestAsk - bestBid;
-          // Volatility proxy: Spread / MidPrice + Recent History Variance (simplified here as Spread %)
           const midPrice = (bestAsk + bestBid) / 2;
           book.volatility = midPrice > 0 ? (book.spread / midPrice) : 0;
       } else {
@@ -138,24 +134,39 @@ export class MarketService {
 
       // Iterate through opposing orders (best price first)
       for (let i = 0; i < opposingBook.length; i++) {
-          if (matchCount >= MAX_MATCH_DEPTH) break; // Safety break
+          if (matchCount >= MAX_MATCH_DEPTH) break; 
 
           const maker = opposingBook[i];
           
-          // Optimization: If trigger is filled, stop
           if (triggerOrder.remainingQuantity <= 0.0001) {
               triggerOrder.status = 'EXECUTED';
               break;
           }
 
-          // Price Check
           if (!MarketService.canMatch(triggerOrder, maker)) break;
 
-          // Execute Match
-          const matchQty = Math.min(triggerOrder.remainingQuantity, maker.remainingQuantity);
-          const matchPrice = maker.price; // Maker sets the price (Limit order on book)
+          // Conservation Check for Market Buys
+          const matchPrice = maker.price;
+          let matchQty = Math.min(triggerOrder.remainingQuantity, maker.remainingQuantity);
+          
+          if (triggerOrder.side === 'BUY' && triggerOrder.type === 'MARKET') {
+              const maxAffordable = (triggerOrder.lockedValue || 0) / matchPrice;
+              if (maxAffordable < matchQty) {
+                  matchQty = Math.floor(maxAffordable * 1000) / 1000;
+                  if (matchQty <= 0) break; // Out of budget
+              }
+          }
 
+          // Execute Match
           MarketService.executeTradeTransfer(state, triggerOrder, maker, matchPrice, matchQty, context);
+
+          // Deduct from Locked Values
+          if (triggerOrder.side === 'BUY' && triggerOrder.lockedValue !== undefined) {
+              triggerOrder.lockedValue -= (matchPrice * matchQty);
+          }
+          if (maker.side === 'BUY' && maker.lockedValue !== undefined) {
+              maker.lockedValue -= (matchPrice * matchQty);
+          }
 
           // Update Quantities
           maker.remainingQuantity -= matchQty;
@@ -164,7 +175,7 @@ export class MarketService {
           // Update Status
           if (maker.remainingQuantity <= 0.0001) {
               maker.status = 'EXECUTED';
-              matchCount++; // Will be removed
+              matchCount++; 
           } else {
               maker.status = 'PARTIALLY_EXECUTED';
           }
@@ -177,39 +188,41 @@ export class MarketService {
           MarketService.AssetLocker.deductTax(state, maker, triggerOrder, matchPrice, matchQty, context);
       }
 
-      // Batch remove filled orders from the top (since they are sorted by best price)
       if (matchCount > 0) {
           opposingBook.splice(0, matchCount);
       }
 
       MarketService.handleOrderRemainder(state, book, triggerOrder, context);
-      MarketService.updateBookMetrics(book); // Re-calc metrics after match
+      MarketService.updateBookMetrics(book);
   }
 
   private static canMatch(taker: Order, maker: Order): boolean {
       if (taker.type === 'LIMIT') {
-          if (taker.side === 'BUY') return maker.price <= taker.price; // Buy low
-          else return maker.price >= taker.price; // Sell high
+          if (taker.side === 'BUY') return maker.price <= taker.price; 
+          else return maker.price >= taker.price; 
       }
-      return true; // Market order takes best available
+      return true; 
   }
 
   private static handleOrderRemainder(state: GameState, book: OrderBook, taker: Order, context?: GameContext): void {
-      if (taker.remainingQuantity <= 0.0001) return;
+      if (taker.remainingQuantity <= 0.0001) {
+          taker.status = 'EXECUTED';
+          // Refund dust
+          MarketService.AssetLocker.refund(state, taker, 0, context);
+          return;
+      }
 
       if (taker.type === 'LIMIT') {
-          // Limit orders stay in book.
-          // Check if it was fully executed (rare here as we check remainder above, but safety)
           if (taker.status === 'EXECUTED') {
               const side = taker.side === 'BUY' ? book.bids : book.asks;
               const idx = side.indexOf(taker);
               if (idx > -1) side.splice(idx, 1);
           }
       } else {
-          // Market Order Remainder: Cancel and Refund
-          MarketService.AssetLocker.refundRemainder(state, taker, context);
+          // Market Order Remainder: Cancel and Refund strict value
+          MarketService.AssetLocker.refund(state, taker, taker.remainingQuantity, context);
           
-          taker.status = 'EXECUTED'; // Effectively cancelled
+          taker.status = 'EXECUTED'; 
           
           // Remove from book
           const side = taker.side === 'BUY' ? book.bids : book.asks;
@@ -226,48 +239,11 @@ export class MarketService {
       const sellerType = taker.side === 'SELL' ? taker.ownerType : maker.ownerType;
 
       // 1. Transfer Goods to Buyer
-      // (Seller already had goods locked/deducted)
-      if (buyerType === 'RESIDENT') {
-          const r = context?.residentMap.get(buyerId) || state.population.residents.find(x => x.id === buyerId);
-          if (r) {
-              if (taker.itemId.startsWith('comp_')) {
-                  // If short covering, this adds to negative balance (approaching zero)
-                  r.portfolio[taker.itemId] = (r.portfolio[taker.itemId] || 0) + qty;
-              } else {
-                  r.inventory[taker.itemId] = (r.inventory[taker.itemId] || 0) + qty;
-              }
-          }
-      } else if (buyerType === 'COMPANY') {
-          const c = context?.companyMap.get(buyerId) || state.companies.find(x => x.id === buyerId);
-          if (c) c.inventory.finished[taker.itemId] = (c.inventory.finished[taker.itemId] || 0) + qty; 
-      }
+      MarketService.AssetLocker.creditItem(state, buyerId, buyerType, taker.itemId, qty, context);
 
       // 2. Transfer Cash to Seller
-      // (Buyer already had cash locked/deducted)
       const cost = price * qty;
-      
-      if (sellerType === 'RESIDENT') {
-          const r = context?.residentMap.get(sellerId) || state.population.residents.find(x => x.id === sellerId);
-          if (r) r.cash += cost;
-      } else if (sellerType === 'COMPANY') {
-          const c = context?.companyMap.get(sellerId) || state.companies.find(x => x.id === sellerId);
-          if (c) {
-              c.cash += cost;
-              c.accumulatedRevenue += cost;
-              c.lastProfit += cost;
-              if (taker.itemId === ProductType.BREAD) c.monthlySalesVolume += qty;
-          }
-      } else if (sellerType === 'TREASURY') {
-          state.cityTreasury.cash += cost;
-      }
-
-      // 3. Price Improvement Refund (Limit Buy)
-      // If Buyer bid 10 but matched at 8, refund 2
-      if (taker.side === 'BUY' && taker.type === 'LIMIT' && taker.price > price) {
-           const excess = (taker.price - price) * qty;
-           const r = context?.residentMap.get(taker.ownerId) || state.population.residents.find(x => x.id === taker.ownerId);
-           if (r) r.cash += excess;
-      }
+      MarketService.AssetLocker.creditCash(state, sellerId, sellerType, cost, context);
   }
 
   private static recordTrade(state: GameState, book: OrderBook, taker: Order, maker: Order, price: number, qty: number) {
@@ -326,38 +302,26 @@ export class MarketService {
 
   // --- Internal Helper Class for Asset Management ---
   
-  private static AssetLocker = class {
+  public static AssetLocker = class {
       
-      static lock(state: GameState, order: Omit<Order, 'id' | 'remainingQuantity' | 'status' | 'timestamp'>, context?: GameContext): boolean {
+      static lock(state: GameState, order: Order, context?: GameContext): boolean {
           if (order.side === 'BUY') return this.lockForBuy(state, order, context);
           else return this.lockForSell(state, order, context);
       }
 
-      static refund(state: GameState, order: Order, amount: number, context?: GameContext): void {
-          if (amount <= 0.0001) return;
-          
+      static refund(state: GameState, order: Order, quantityToRefund: number, context?: GameContext): void {
           if (order.side === 'BUY') {
-              if (order.type === 'LIMIT') {
-                  this.creditCash(state, order.ownerId, order.ownerType, order.price * amount, context);
-              } else {
-                  const book = state.market[order.itemId];
-                  const price = book ? book.lastPrice : 1.0;
-                  this.creditCash(state, order.ownerId, order.ownerType, price * 1.2 * amount, context);
+              // Return any remaining locked cash
+              const remainingCash = order.lockedValue || 0;
+              if (remainingCash > 0) {
+                  this.creditCash(state, order.ownerId, order.ownerType, remainingCash, context);
+                  order.lockedValue = 0;
               }
           } else {
-              this.creditItem(state, order.ownerId, order.ownerType, order.itemId, amount, context);
-          }
-      }
-
-      static refundRemainder(state: GameState, order: Order, context?: GameContext): void {
-          // Special handling for Market Order remainders
-          if (order.side === 'BUY') {
-               const book = state.market[order.itemId];
-               const estimatedLockPrice = (book?.lastPrice || 1.0) * 1.2;
-               const refundCash = estimatedLockPrice * order.remainingQuantity;
-               this.creditCash(state, order.ownerId, order.ownerType, refundCash, context);
-          } else {
-              this.creditItem(state, order.ownerId, order.ownerType, order.itemId, order.remainingQuantity, context);
+              // Return items
+              if (quantityToRefund > 0) {
+                  this.creditItem(state, order.ownerId, order.ownerType, order.itemId, quantityToRefund, context);
+              }
           }
       }
 
@@ -380,26 +344,29 @@ export class MarketService {
 
       // --- Private Implementation ---
 
-      private static lockForBuy(state: GameState, order: any, context?: GameContext): boolean {
+      private static lockForBuy(state: GameState, order: Order, context?: GameContext): boolean {
           let costToLock = 0;
           if (order.type === 'LIMIT') {
               costToLock = order.price * order.quantity;
           } else {
-             // Market Buy: Lock based on best ask + safety margin
              const book = state.market[order.itemId];
              if (!book || book.asks.length === 0) return false;
              const bestAsk = book.asks[0].price;
-             costToLock = bestAsk * order.quantity * 1.2; // 20% slippage protection
+             costToLock = bestAsk * order.quantity * 1.5; // 50% buffer
           }
           
-          return this.debitCash(state, order.ownerId, order.ownerType, costToLock, context);
+          if (this.debitCash(state, order.ownerId, order.ownerType, costToLock, context)) {
+              order.lockedValue = costToLock;
+              return true;
+          }
+          return false;
       }
 
-      private static lockForSell(state: GameState, order: any, context?: GameContext): boolean {
+      private static lockForSell(state: GameState, order: Order, context?: GameContext): boolean {
           return this.debitItem(state, order.ownerId, order.ownerType, order.itemId, order.quantity, context);
       }
 
-      private static debitCash(state: GameState, id: string, type: string, amount: number, context?: GameContext): boolean {
+      static debitCash(state: GameState, id: string, type: string, amount: number, context?: GameContext): boolean {
           if (type === 'RESIDENT') {
               const r = context?.residentMap.get(id) || state.population.residents.find(x => x.id === id);
               if (!r || r.cash < amount) return false;
@@ -418,7 +385,7 @@ export class MarketService {
           return false;
       }
 
-      private static creditCash(state: GameState, id: string, type: string, amount: number, context?: GameContext) {
+      static creditCash(state: GameState, id: string, type: string, amount: number, context?: GameContext) {
           if (type === 'RESIDENT') {
               const r = context?.residentMap.get(id) || state.population.residents.find(x => x.id === id);
               if (r) r.cash += amount;
@@ -436,20 +403,16 @@ export class MarketService {
               if (!r) return false;
               
               if (itemId.startsWith('comp_')) {
-                  // Stock
                   const currentShares = r.portfolio[itemId] || 0;
                   if (r.isPlayer) {
-                      // Player can Short (Negative Balance allowed conceptually, but here we just decrement)
                       r.portfolio[itemId] = currentShares - qty;
                       return true;
                   } else {
-                      // AI cannot short
                       if (currentShares < qty) return false;
                       r.portfolio[itemId] = currentShares - qty;
                       return true;
                   }
               } else {
-                  // Commodity
                   const currentInv = r.inventory[itemId] || 0;
                   if (currentInv < qty) return false;
                   r.inventory[itemId] = currentInv - qty;
@@ -466,7 +429,7 @@ export class MarketService {
           return false;
       }
 
-      private static creditItem(state: GameState, id: string, type: string, itemId: string, qty: number, context?: GameContext) {
+      static creditItem(state: GameState, id: string, type: string, itemId: string, qty: number, context?: GameContext) {
           if (type === 'RESIDENT') {
               const r = context?.residentMap.get(id) || state.population.residents.find(x => x.id === id);
               if (r) {

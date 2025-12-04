@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart, Bot, Sparkles, PieChart, Layers } from 'lucide-react';
+import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart, Bot, Sparkles, PieChart, Layers, Scale } from 'lucide-react';
 import { ProductType, ResourceType, IndustryType } from '../../shared/types';
 import { Card, Button } from '../../shared/components';
 import { RESOURCE_ICONS } from '../../shared/assets';
@@ -20,11 +19,12 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const company = useGameStore(s => s.gameState.companies.find(c => c.id === companyId));
   const resources = useGameStore(s => s.gameState.resources);
   const playerPortfolio = useGameStore(s => s.gameState.population.residents.find(r => r.isPlayer)?.portfolio);
+  const bank = useGameStore(s => s.gameState.bank);
   
   const updateCompany = useGameStore(s => s.updateCompany);
   const payDividend = useGameStore(s => s.payDividend);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'lines' | 'shareholders' | 'ai'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'chart' | 'lines' | 'finance' | 'shareholders' | 'ai'>('overview');
   const [aiAnalysis, setAiAnalysis] = useState<string>("");
   const [analyzing, setAnalyzing] = useState(false);
   
@@ -47,6 +47,13 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       if (stage === 'MATURITY') return 'text-amber-400 bg-amber-900/30 border-amber-800';
       return 'text-red-400 bg-red-900/30 border-red-800';
   };
+
+  // Finance Calcs
+  const equity = company.sharePrice * company.totalShares;
+  const debt = bank.loans.filter(l => l.borrowerId === company.id).reduce((s,l) => s + l.remainingPrincipal, 0);
+  const assets = company.cash + (company.landTokens || 0) * 100 + Object.values(company.inventory.finished).reduce<number>((a,b)=>a+(Number(b)||0),0);
+  const leverage = debt / (equity || 1);
+  const creditScore = company.kpis.creditScore || 0;
 
   return (
     <motion.div 
@@ -74,6 +81,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
 
           <div className="flex gap-2 mb-4 border-b border-stone-800 pb-2 overflow-x-auto whitespace-nowrap custom-scrollbar">
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'overview' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('overview')}><Activity size={12}/> 经营</button>
+            <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'finance' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('finance')}><Scale size={12}/> 财务</button>
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'chart' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('chart')}><BarChart size={12}/> 股价</button>
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'lines' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('lines')}><Briefcase size={12}/> 生产</button>
             <button className={`px-3 py-1 text-xs rounded flex items-center gap-1 ${activeTab === 'shareholders' ? 'bg-blue-900 text-white' : 'text-stone-400'}`} onClick={() => setActiveTab('shareholders')}><Users size={12}/> 股东</button>
@@ -95,6 +103,47 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                     </div>
                     <div className="h-[300px] sm:h-[400px]">
                         <KLineChart data={company.history} height={undefined} />
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'finance' && (
+                <div className="space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-stone-950 p-3 rounded border border-stone-800 text-center">
+                            <div className="text-xs text-stone-500">Credit Score</div>
+                            <div className={`text-xl font-bold ${creditScore > 70 ? 'text-emerald-400' : 'text-red-400'}`}>{creditScore.toFixed(0)}</div>
+                        </div>
+                        <div className="bg-stone-950 p-3 rounded border border-stone-800 text-center">
+                            <div className="text-xs text-stone-500">Total Debt</div>
+                            <div className="text-xl font-bold text-red-400">{Math.floor(debt)} oz</div>
+                        </div>
+                        <div className="bg-stone-950 p-3 rounded border border-stone-800 text-center">
+                            <div className="text-xs text-stone-500">Assets</div>
+                            <div className="text-xl font-bold text-blue-400">{Math.floor(assets)} oz</div>
+                        </div>
+                        <div className="bg-stone-950 p-3 rounded border border-stone-800 text-center">
+                            <div className="text-xs text-stone-500">Leverage (D/E)</div>
+                            <div className="text-xl font-bold text-white">{leverage.toFixed(2)}x</div>
+                        </div>
+                    </div>
+
+                    <div className="bg-stone-950 p-4 rounded border border-stone-800">
+                        <h4 className="text-sm font-bold text-stone-300 mb-2">Loan Eligibility Status</h4>
+                        <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                                <span>Solvency Check (D/E &lt; 2.0)</span>
+                                <span className={leverage < 2 ? "text-emerald-500" : "text-red-500"}>{leverage < 2 ? "PASS" : "FAIL"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Profitability (Last Period)</span>
+                                <span className={company.lastProfit > 0 ? "text-emerald-500" : "text-red-500"}>{company.lastProfit > 0 ? "POSITIVE" : "NEGATIVE"}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span>Collateral Sufficiency</span>
+                                <span className={assets > debt * 1.5 ? "text-emerald-500" : "text-amber-500"}>{assets > debt * 1.5 ? "HIGH" : "LOW"}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -210,11 +259,11 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                     </div>
                     <div className="bg-stone-950 p-2 rounded border border-stone-800">
                         <div className="text-stone-500 text-xs">原料库存</div>
-                        <div className="text-stone-200 font-mono">{Object.values(company.inventory.raw).reduce((a: number, b: any) => a + (Number(b) || 0), 0)}</div>
+                        <div className="text-stone-200 font-mono">{Object.values(company.inventory.raw).reduce<number>((a, b) => a + (Number(b) || 0), 0)}</div>
                     </div>
                     <div className="bg-stone-950 p-2 rounded border border-stone-800">
                         <div className="text-stone-500 text-xs">成品库存</div>
-                        <div className="text-blue-300 font-mono">{Object.values(company.inventory.finished).reduce((a: number, b: any) => a + (Number(b) || 0), 0)}</div>
+                        <div className="text-blue-300 font-mono">{Object.values(company.inventory.finished).reduce<number>((a, b) => a + (Number(b) || 0), 0)}</div>
                     </div>
                 </div>
               </>

@@ -8,6 +8,8 @@ export interface MonetaryStrategy {
     canLend(bank: Bank, borrowAmount: number): boolean;
     /** Handles the accounting side effect of issuing a loan */
     onLoanIssued(bank: Bank, amount: number): void;
+    /** Handles the accounting side effect of repaying a loan */
+    onLoanRepaid(bank: Bank, amount: number): void;
 }
 
 export class GoldStandardStrategy implements MonetaryStrategy {
@@ -45,6 +47,11 @@ export class GoldStandardStrategy implements MonetaryStrategy {
     onLoanIssued(bank: Bank, amount: number): void {
         // In a physical gold system, lending often implies physical transfer or claims that encumber reserves
         bank.reserves -= amount; 
+    }
+
+    onLoanRepaid(bank: Bank, amount: number): void {
+        // Repayment returns gold/specie to the vault
+        bank.reserves += amount;
     }
 }
 
@@ -99,6 +106,12 @@ export class FiatTaylorRuleStrategy implements MonetaryStrategy {
     onLoanIssued(bank: Bank, amount: number): void {
         // Fiat Money Creation: Loans create Deposits.
         // Balance Sheet Expands. Reserves are NOT consumed, they just back the new deposit.
-        // (Simplified: We don't touch reserves here, money is created ex nihilo in borrower account)
+    }
+
+    onLoanRepaid(bank: Bank, amount: number): void {
+        // Money Destruction: Repayment destroys the deposit/asset.
+        // However, we capture a small portion (interest/profit) into reserves to prevent total system deflation from interest
+        // For simplicity in this simulation, we simulate profit retention:
+        bank.reserves += amount * 0.05; 
     }
 }

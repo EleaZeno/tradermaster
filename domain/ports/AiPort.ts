@@ -22,4 +22,6 @@ export interface AiPort {
   auditEconomy(snapshot: EconomicHealthSnapshot): Promise<string>;
   
   generateMarketEvent(currentDay: number): Promise<NewsEvent | null>;
+
+  debugSimulation(context: string): Promise<string>;
 }

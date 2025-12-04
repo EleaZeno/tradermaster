@@ -1,6 +1,6 @@
 
 import { StateCreator } from 'zustand';
-import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure, PolicyOverrides, MonetarySystemType } from '../types';
+import { GameState, MarketEvent, IndustryType, Company, ResourceType, FuturesContract, Bank, GameSettings, Resident, CompanyType, WageStructure, PolicyOverrides, MonetarySystemType, LandPlot } from '../types';
 import { INITIAL_STATE } from '../initialState';
 import { processGameTick } from '../../domain/gameLogic';
 import { MarketSystem } from '../../domain/systems/MarketSystem';
@@ -19,6 +19,7 @@ export interface MarketSlice {
   trade: (action: 'buy' | 'sell', itemId: IndustryType) => void;
   buyFutures: (resId: ResourceType, type: 'LONG' | 'SHORT') => void;
   closeFuture: (contractId: string) => void;
+  buyPlot: (plotId: string) => void; // New
 }
 
 export interface PlayerSlice {
@@ -81,7 +82,8 @@ export const createUISlice: StateCreator<GameStore, [["zustand/immer", never]], 
   }),
 
   updateChatHistory: (history) => set((state) => {
-    state.gameState.chatHistory = history;
+    const cappedHistory = history.length > 50 ? history.slice(history.length - 50) : history;
+    state.gameState.chatHistory = cappedHistory;
   }),
 
   dismissNotification: (id) => set((state) => {
@@ -124,7 +126,6 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
 
     state.gameState.cash = playerRes.cash;
     
-    // Trigger Effects (Visual Feedback)
     if (action === 'sell') {
         const gain = playerRes.cash - prevCash;
         if (gain > 0) {
@@ -144,7 +145,7 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
     const res = state.gameState.resources[resId];
     const player = state.gameState.population.residents.find(r => r.isPlayer);
     const amount = 50; 
-    const marginReq = 0.2; // 20% margin = 5x leverage
+    const marginReq = 0.2; 
     const margin = res.currentPrice * amount * marginReq;
 
     if (player && player.cash >= margin) {
@@ -156,7 +157,7 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
         type, 
         amount, 
         entryPrice: res.currentPrice, 
-        dueDate: state.gameState.day + 7 // 7 Day Expiry
+        dueDate: state.gameState.day + 7 
       };
       player.futuresPositions.push(contract);
       state.gameState.futures.push(contract);
@@ -180,10 +181,6 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
           if (contract.type === 'LONG') pnl = exitVal - entryVal;
           else pnl = entryVal - exitVal;
 
-          // Return Margin + PnL
-          // Initial Margin was 20% of Entry. 
-          // Simplified: We assume initial margin is sunk into 'cash' changes, so we just return (Margin + PnL)
-          // Actually, in buyFutures we deducted Margin. So now we return Margin + PnL.
           const margin = contract.entryPrice * contract.amount * 0.2;
           const payout = margin + pnl;
           
@@ -196,6 +193,24 @@ export const createMarketSlice: StateCreator<GameStore, [["zustand/immer", never
           state.gameState.logs.unshift(`💰 平仓期货: 盈亏 ${pnl.toFixed(1)} oz`);
           if (pnl > 0) triggerEffect('income', payout, 'PnL');
           else triggerEffect('expense', Math.abs(pnl), 'Loss');
+      }
+  }),
+
+  buyPlot: (plotId) => set((state) => {
+      const player = state.gameState.population.residents.find(r => r.isPlayer);
+      const plot = state.gameState.map.find(p => p.id === plotId);
+      
+      if (player && plot && !plot.ownerId && player.cash >= plot.price) {
+          player.cash -= plot.price;
+          state.gameState.cash = player.cash;
+          plot.ownerId = player.id;
+          plot.isForSale = false;
+          
+          // Legacy: Add land tokens
+          player.landTokens = (player.landTokens || 0) + 1;
+          
+          state.gameState.logs.unshift(`🗺️ 购买地块 ${plot.id} (-${plot.price} oz)`);
+          triggerEffect('expense', plot.price, 'Land');
       }
   })
 });
@@ -267,7 +282,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     state.gameState.cash = player.cash;
     const gain = player.cash - prevCash;
     if (gain > 0) triggerEffect('income', gain, 'oz (Short)');
-    state.gameState.logs.unshift(`📈 做空 (Short) ${id} - 100股`);
+    state.gameState.logs.unshift(`📉 做空 (Short) ${id} - 100股`);
   }),
 
   coverStock: (id, isFund) => set((state) => {
@@ -288,7 +303,7 @@ export const createPlayerSlice: StateCreator<GameStore, [["zustand/immer", never
     state.gameState.cash = player.cash;
     const cost = prevCash - player.cash;
     if (cost > 0) triggerEffect('expense', cost, 'oz (Cover)');
-    state.gameState.logs.unshift(`📉 平仓 (Cover) ${id} + 100股`);
+    state.gameState.logs.unshift(`📈 平仓 (Cover) ${id} + 100股`);
   }),
 
   setLivingStandard: (level) => set((state) => {
@@ -333,7 +348,7 @@ export const createCompanySlice: StateCreator<GameStore, [["zustand/immer", neve
         tobinQ: 1.0,
         age: 0,
         stage: 'STARTUP',
-        kpis: { roe: 0, roa: 0, roi: 0, leverage: 0, marketShare: 0 }
+        kpis: { roe: 0, roa: 0, roi: 0, leverage: 0, marketShare: 0, creditScore: 100 }
       });
       
       state.gameState.market[newId] = { bids: [], asks: [], lastPrice: 1.0, history: [], volatility: 0, spread: 0 };
@@ -461,3 +476,4 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
     }
   }),
 });
+    

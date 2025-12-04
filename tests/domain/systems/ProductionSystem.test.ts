@@ -1,6 +1,3 @@
-
-
-
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ProductionSystem } from '../../../domain/systems/ProductionSystem';
 import { GameState, ResourceType, ProductType, FlowStats, OrderBook, GameContext, BusinessCyclePhase, MayorPersonality } from '../../../shared/types';
@@ -37,6 +34,7 @@ const createMockState = (): GameState => ({
         [ResourceType.GRAIN]: createEmptyBook(1.0),
         [ProductType.BREAD]: createEmptyBook(2.0)
     },
+    map: [],
     achievements: [],
     notifications: [],
     settings: {

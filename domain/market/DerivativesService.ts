@@ -15,8 +15,7 @@ export class DerivativesService {
             const isExpired = state.day >= contract.dueDate;
             const currentPrice = state.resources[contract.resourceId]?.currentPrice || 1.0;
             
-            // Mark-to-Market (Daily PnL Check for Margin Call)
-            // Simplified: We don't deduct daily unless closed, but we check for liquidation
+            // Mark-to-Market
             const entryVal = contract.entryPrice * contract.amount;
             const currentVal = currentPrice * contract.amount;
             
@@ -25,21 +24,27 @@ export class DerivativesService {
             else unrealizedPnL = entryVal - currentVal;
 
             // Liquidation Logic (Margin Call)
-            // If loss exceeds cash buffer (simplified maintenance margin)
             if (player.cash + unrealizedPnL < 0) {
                 state.logs.unshift(`💥 期货爆仓: ${contract.resourceId} ${contract.type} (强制平仓)`);
-                // Realize the loss
+                // Loss Realized
                 player.cash += unrealizedPnL; 
-                return; // Contract removed
+                state.cityTreasury.cash -= unrealizedPnL; // Treasury gains the lost margin/PnL (Counterparty)
+                return; 
             }
 
             if (isExpired) {
                 // Settlement
                 player.cash += unrealizedPnL;
+                
+                // CONSERVATION OF MONEY:
+                // If player wins (PnL > 0), Treasury pays.
+                // If player loses (PnL < 0), Treasury gains.
+                state.cityTreasury.cash -= unrealizedPnL;
+
                 state.logs.unshift(`📜 期货交割: ${contract.resourceId} ${contract.type} 盈亏: ${unrealizedPnL.toFixed(2)} oz`);
             } else {
                 keptPositions.push(contract);
-                activeContracts.push(contract); // Global registry
+                activeContracts.push(contract);
             }
         });
 
