@@ -19,20 +19,29 @@ export class FiscalService {
       const M0 = state.economicOverview.totalSystemGold || 1000;
       const hoardingRatio = treasury.cash / M0;
       
+      const activeCompaniesCount = state.companies.filter(c => !c.isBankrupt).length;
+      
       let status: 'AUSTERITY' | 'NEUTRAL' | 'STIMULUS' = 'NEUTRAL';
       let actionLog = "";
 
       // 1. Determine Welfare Budget
       const deputy = context.residentsByJob['DEPUTY_MAYOR']?.[0];
-      let welfareBudget = 30; 
+      let welfareBudget = 50; 
       
-      if (personality === MayorPersonality.POPULIST) welfareBudget = 100;
-      if (personality === MayorPersonality.AUSTRIAN) welfareBudget = 5;
+      if (personality === MayorPersonality.POPULIST) welfareBudget = 150;
+      if (personality === MayorPersonality.AUSTRIAN) welfareBudget = 10;
 
       if (deputy && personality !== MayorPersonality.AUSTRIAN) {
           if (treasury.cash > 200) welfareBudget *= 1.5;
           else welfareBudget *= 0.5;
       }
+      
+      // Boost welfare during recession/depression
+      if (cycle === BusinessCyclePhase.DEPRESSION || cycle === BusinessCyclePhase.RECESSION) {
+          welfareBudget *= 2.0;
+          actionLog += "福利加倍 (Crisis); ";
+      }
+
       treasury.taxPolicy.grainSubsidy = welfareBudget;
 
       // 2. Strategic Reserves (Government Spending 'G')
@@ -57,7 +66,7 @@ export class FiscalService {
 
       // 3. Personality-Driven Fiscal Response
       const lastGdp = state.macroHistory.length > 0 ? state.macroHistory[state.macroHistory.length - 1].gdp : 100;
-      const isCrisis = lastGdp < 10 || cycle === BusinessCyclePhase.DEPRESSION;
+      const isCrisis = lastGdp < 10 || cycle === BusinessCyclePhase.DEPRESSION || activeCompaniesCount < 2;
 
       if (isCrisis) {
           const isGoldStandard = state.bank.system === 'GOLD_STANDARD';
@@ -89,7 +98,7 @@ export class FiscalService {
               }
               
               if (fundingSecured) {
-                  const poor = state.population.residents.filter(r => r.cash < 5);
+                  const poor = state.population.residents.filter(r => r.cash < 10);
                   if (poor.length > 0) {
                       const amount = bailoutNeeded / poor.length;
                       poor.forEach(r => {
@@ -97,9 +106,12 @@ export class FiscalService {
                       });
                       actionLog += `直升机撒钱 (Helicopter Money); `;
                   } else {
+                       // Bailout Logic: Target any non-bankrupt company with negative cash
                        state.companies.forEach(c => {
-                           if (c.cash < 100 && !c.isBankrupt) {
-                               TransactionService.transfer('TREASURY', c, 200, { treasury, residents: state.population.residents, context });
+                           if (c.cash < 0 && !c.isBankrupt) {
+                               const injection = Math.abs(c.cash) + 200; // Restore to positive + buffer
+                               TransactionService.transfer('TREASURY', c, injection, { treasury, residents: state.population.residents, context });
+                               state.logs.unshift(`🏛️ 财政部注资挽救 ${c.name} (+${Math.floor(injection)})`);
                            }
                        });
                        actionLog += `企业纾困注资 (Bailout); `;
@@ -135,7 +147,7 @@ export class FiscalService {
               
               // Only do Citizen Dividend if surplus is HUGE
               const surplus = treasury.cash - (M0 * 0.10); 
-              if (surplus > 500) { // Increased threshold
+              if (surplus > 500) { 
                   const residents = state.population.residents;
                   const perCapita = surplus / residents.length;
                   residents.forEach(r => {
@@ -162,16 +174,19 @@ export class FiscalService {
   private static processWelfare(state: GameState, context: GameContext) {
       // Basic Income for Extreme Poverty
       const treasury = state.cityTreasury;
-      if (treasury.cash < 10) return;
-
-      const povertyLine = 5;
+      const povertyLine = 15; 
       const poor = state.population.residents.filter(r => r.cash < povertyLine && r.job !== 'MAYOR');
       
-      const subsidy = state.cityTreasury.taxPolicy.grainSubsidy; // e.g. 30 total budget
+      const subsidy = state.cityTreasury.taxPolicy.grainSubsidy; // e.g. 50+ total budget
       if (poor.length === 0 || subsidy <= 0) return;
 
-      const amountPerPerson = Math.min(5, subsidy / poor.length); // Cap at 5oz per person per day
+      const amountPerPerson = Math.min(10, subsidy / poor.length); 
       const totalNeeded = amountPerPerson * poor.length;
+
+      // Fix: If treasury is empty but in Fiat, print money to prevent starvation
+      if (treasury.cash < totalNeeded && state.bank.system !== 'GOLD_STANDARD') {
+          BankingService.monetizeDebt(state, totalNeeded - treasury.cash + 100);
+      }
 
       if (treasury.cash >= totalNeeded) {
           poor.forEach(r => {

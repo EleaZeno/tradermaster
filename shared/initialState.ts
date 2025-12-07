@@ -259,7 +259,8 @@ export const INITIAL_COMPANIES: Company[] = [
     kpis: { roe: 0.1, roa: 0.08, roi: 0.12, leverage: 0.2, marketShare: 0.6, creditScore: 85 },
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.05, 20),
-    type: CompanyType.COOPERATIVE, wageStructure: WageStructure.FLAT, ceoId: 'res_3', isBankrupt: false
+    type: CompanyType.COOPERATIVE, wageStructure: WageStructure.FLAT, ceoId: 'res_3', isBankrupt: false,
+    consecutiveNegativeCashDays: 0
   },
   {
     id: 'comp_food', name: '大众食品厂',
@@ -288,7 +289,8 @@ export const INITIAL_COMPANIES: Company[] = [
     kpis: { roe: 0.15, roa: 0.1, roi: 0.2, leverage: 0.5, marketShare: 0.4, creditScore: 70 },
     accumulatedRevenue: 0, accumulatedCosts: 0, accumulatedWages: 0, accumulatedMaterialCosts: 0, lastRevenue: 0, lastProfit: 0,
     monthlySalesVolume: 0, monthlyProductionVolume: 0, reports: [], history: generateFakeHistory(1.0, 0.1, 20),
-    type: CompanyType.CORPORATION, wageStructure: WageStructure.HIERARCHICAL, ceoId: 'res_5', isBankrupt: false
+    type: CompanyType.CORPORATION, wageStructure: WageStructure.HIERARCHICAL, ceoId: 'res_5', isBankrupt: false,
+    consecutiveNegativeCashDays: 0
   }
 ];
 
@@ -382,4 +384,3 @@ export const INITIAL_STATE: GameState = {
         score: 100, stability: 100, productivity: 50, debtRisk: 0, liquidity: 100, equality: 80
     }
 };
-    

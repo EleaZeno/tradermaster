@@ -26,10 +26,16 @@ export class GDPService {
         };
     });
 
-    // Fix: Farmers are Self-Employed, not Unemployed. Only count pure UNEMPLOYED.
     const unemployedCount = state.population.residents.filter(r => r.job === 'UNEMPLOYED').length;
+    
     const laborForce = state.population.total;
     const unemploymentRate = laborForce > 0 ? unemployedCount / laborForce : 0;
+
+    // --- Update Population State Stats (Critical for AI and HealthCheck) ---
+    state.population.unemployed = unemployedCount;
+    state.population.laborers = state.population.residents.filter(r => r.job === 'WORKER').length;
+    state.population.farmers = state.population.residents.filter(r => r.job === 'FARMER').length;
+    // -----------------------------------------------------------------------
 
     const grainPrice = state.resources[ResourceType.GRAIN].currentPrice;
     const breadPrice = state.products[ProductType.BREAD].marketPrice;
@@ -42,10 +48,14 @@ export class GDPService {
     const gdp = gdpFlow.C + gdpFlow.I + gdpFlow.G;
 
     // --- M0 Accounting (Monetary Base) ---
-    const totalResidentCash = state.population.residents.reduce((s, r) => s + r.cash, 0);
-    const totalCorporateCash = state.companies.reduce((s, c) => s + c.cash, 0);
-    const totalFundCash = state.funds.reduce((s, f) => s + f.cash, 0);
-    const totalCityCash = state.cityTreasury.cash;
+    // Standardized with SanityCheck: Include negative cash as it represents net position in a closed system.
+    // Negative cash is debt to another entity (e.g. Treasury/Bank), but the positive counterpart exists elsewhere.
+    // Summing them all (including negative) gives the Net Monetary Base.
+    
+    const totalResidentCash = state.population.residents.reduce((s, r) => s + r.cash, 0); // Include negative
+    const totalCorporateCash = state.companies.reduce((s, c) => s + c.cash, 0); // Include negative
+    const totalFundCash = state.funds.reduce((s, f) => s + f.cash, 0); // Include negative
+    const totalCityCash = state.cityTreasury.cash; // Can be negative
     const totalReserves = state.bank.reserves;
 
     // Include Cash Locked in Market (Escrow for Buy Orders)
@@ -80,7 +90,7 @@ export class GDPService {
         totalCorporateCash,
         totalFundCash,
         totalCityCash,
-        totalSystemGold: M0, // Correct Monetary Base
+        totalSystemGold: M0, // Correctly updated to current net sum
         totalInventoryValue: 0, 
         totalMarketCap: 0, 
         totalFuturesNotional: 0,

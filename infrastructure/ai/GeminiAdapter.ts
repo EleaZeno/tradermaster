@@ -12,17 +12,20 @@ const NEWS_EVENTS = [
 ];
 
 const CODEBASE_MAP = `
-## 🗺️ Codebase Architecture Map (For Debugging Locality)
-- **Orchestrator**: \`application/GameLoop.ts\` (Main Tick Loop)
-- **Market/LOB**: \`domain/market/MarketService.ts\` (Matching Engine, Order Book)
-- **Banking/Loans**: \`domain/finance/BankingService.ts\` (Interest, Credit, Monetary Policy)
-- **Stocks/Valuation**: \`domain/finance/StockMarketService.ts\` (Price discovery, Dividends)
-- **Labor/Wages**: \`domain/labor/LaborService.ts\` (Hiring, Firing, Wage Stickiness)
-- **Production**: \`domain/company/ProductionService.ts\` (Output calc, Inventory, Spoilage)
-- **Consumption**: \`domain/consumer/ConsumerService.ts\` (Utility function, MPC, Shopping)
-- **Macro/GDP**: \`domain/macro/GDPService.ts\` (Accounting, Inflation calc)
-- **Fiscal/Gov**: \`domain/macro/FiscalService.ts\` (Taxes, Bailouts)
-- **Sanity Checks**: \`domain/analytics/SanityCheckSystem.ts\` (Conservation of Money violations)
+## 🗺️ Codebase Architecture Map (v3.3 Physics Engine)
+- **Orchestrator**: \`application/GameLoop.ts\` (Main Tick Loop, Profiling)
+- **Market/LOB**: \`domain/market/MarketService.ts\` (Matching Engine, Order Book, AssetLocker)
+- **Derivatives**: \`domain/market/DerivativesService.ts\` (Futures, Margin Calls, Liquidation)
+- **Banking**: \`domain/finance/BankingService.ts\` (Monetary Policy strategies, Credit Creation, M2)
+- **Stocks**: \`domain/finance/StockMarketService.ts\` (Valuation models, Dividend policies)
+- **Labor**: \`domain/labor/LaborService.ts\` (Hiring/Firing logic, Sticky Wages, Union Tension)
+- **Production**: \`domain/company/ProductionService.ts\` (Input/Output, Capital Depreciation, Spoilage)
+- **Lifecycle**: \`domain/company/CompanyService.ts\` (Bankruptcy logic, Zombie detection, IPOs)
+- **Consumption**: \`domain/consumer/ConsumerService.ts\` (Stone-Geary Utility, MPC, Precautionary Savings)
+- **Demographics**: \`domain/demographics/DemographicsService.ts\` (Migration, Consumer Sentiment, Social Mobility)
+- **Macro**: \`domain/macro/GDPService.ts\` & \`FiscalService.ts\` (GDP Accounting, Taxes, Bailouts, Fiscal Policy)
+- **Analytics**: \`domain/analytics/HealthCheckService.ts\` & \`SanityCheckSystem.ts\` (Conservation of Money violations)
+- **Land**: \`features/map/MapPanel.tsx\` (Land Plot logic)
 `;
 
 export class GeminiAdapter implements AiPort {
@@ -229,27 +232,35 @@ export class GeminiAdapter implements AiPort {
 
             ### 🎯 Diagnosis Objectives:
             1.  **Forensic Audit**: Identify why M0 (Money Conservation) might be leaking (Check 'audit' field).
-            2.  **Market Pathology**: Identify if Order Books are crossed (Bid >= Ask) or empty (Liquidity Crisis).
-            3.  **Entity Logic**: Check for "Zombie" companies (Negative Cash but not Bankrupt) or "Starving" agents.
-            4.  **Macro Deadlock**: Detect if GDP is 0 or Velocity is 0 (System Frozen).
+            2.  **Calibration Check (Stylized Facts)**: Review the \`stylizedFacts\` section. 
+                - **Phillips Curve**: Should be Negative correlation. If Positive, stagflation or logic bug?
+                - **Okun's Law**: Should be Negative. If Positive, productivity model is broken.
+                - **QTM**: Money Supply should correlate with Inflation.
+                - **Zipf**: Firm sizes should follow power law.
+            3.  **Market Pathology**: Identify if Order Books are crossed (Bid >= Ask) or empty (Liquidity Crisis).
+            4.  **Entity Logic**: Check for "Zombie" companies (Negative Cash but not Bankrupt) or "Starving" agents.
+            5.  **Lifecycle**: Ensure bankrupt companies are not trading (Delisting check).
 
             ### 📝 Output Format (Markdown):
             
             ## 🛠️ System Diagnostic Report
             
-            ### 🚨 Critical Anomalies
-            *List specific data violations (e.g., "M0 Mismatch of -50oz"). Cite specific IDs.*
+            ### 🚨 Critical Anomalies (M0 & Logic)
+            *List specific data violations (e.g., "M0 Mismatch of -50oz").*
+
+            ### 📐 Stylized Facts Calibration
+            *Analyze the \`stylizedFacts\` scores. Are they realistic?*
+            - ✅ Phillips: [Score] (Interpretation)
+            - ⚠️ Okun: [Score] (Interpretation)
+            ...
 
             ### 📉 Economic Pathology
-            *Analyze the flow of money/goods. Is there a bottleneck? Is inflation runaway?*
+            *Analyze the flow of money/goods. Is there a bottleneck? Is inflation runaway? Check if Zombie Companies exist.*
 
             ### 🧩 Codebase Locality
             *Point to the likely file (from the Map) causing the issue.*
             - **Suspect**: \`path/to/file.ts\`
             - **Reasoning**: ...
-
-            ### 🔧 Hotfix Recommendation
-            *Suggest a specific parameter tweak (e.g., "Lower interest rate") or logic fix.*
 
             **Respond in Chinese (Simplified). Be technical and precise.**
             `;

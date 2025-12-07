@@ -5,18 +5,14 @@ const MAX_MATCH_DEPTH = 50;
 
 export class MarketService {
   
-  /**
-   * Main entry point for submitting orders.
-   * Handles validation, asset locking (escrow), insertion, and matching.
-   */
   static submitOrder(
       state: GameState, 
       order: Omit<Order, 'id' | 'remainingQuantity' | 'status' | 'timestamp' | 'lockedValue'>,
       context?: GameContext
   ): boolean {
       // 1. Validation
-      if (order.type === 'LIMIT' && order.price <= 0) return false;
-      if (order.quantity <= 0) return false;
+      if (order.type === 'LIMIT' && (order.price <= 0 || !Number.isFinite(order.price))) return false;
+      if (order.quantity <= 0 || !Number.isFinite(order.quantity)) return false;
       if (!order.ownerId) return false;
 
       const fullOrder: Order = {
@@ -53,7 +49,6 @@ export class MarketService {
           bookSide.sort((a, b) => a.price - b.price || a.timestamp - b.timestamp);
       }
 
-      // Update Market Metrics (Microstructure)
       MarketService.updateBookMetrics(book);
 
       // 6. Try to Match immediately
@@ -85,8 +80,28 @@ export class MarketService {
       MarketService.updateBookMetrics(book);
   }
 
+  static cancelAllOrders(state: GameState, ownerId: string, itemId: string, context?: GameContext): void {
+      const book = state.market[itemId];
+      if (!book) return;
+
+      const pruneSide = (side: Order[]) => {
+          for (let i = side.length - 1; i >= 0; i--) {
+              if (side[i].ownerId === ownerId) {
+                  const order = side[i];
+                  MarketService.AssetLocker.refund(state, order, order.remainingQuantity, context);
+                  order.status = 'CANCELLED';
+                  side.splice(i, 1);
+              }
+          }
+      };
+      
+      pruneSide(book.bids);
+      pruneSide(book.asks);
+      MarketService.updateBookMetrics(book);
+  }
+
   static pruneStaleOrders(state: GameState, context: GameContext): void {
-      const TTL = 3; // Orders live for 3 days
+      const TTL = 5; // Reduced from 14 to 5 to clear blocks faster
       
       Object.keys(state.market).forEach(itemId => {
           const book = state.market[itemId];
@@ -106,6 +121,47 @@ export class MarketService {
 
           prune(book.bids);
           prune(book.asks);
+          
+          // Liquidity Injection (Market Maker)
+          // If book is empty or spread is massive (> 50%), Treasury injects liquidity
+          if (!itemId.startsWith('comp_')) {
+              const spreadTooHigh = book.spread > book.lastPrice * 0.5;
+              const emptyBids = book.bids.length === 0;
+              const emptyAsks = book.asks.length === 0;
+
+              if (spreadTooHigh || emptyBids || emptyAsks) {
+                  const refPrice = book.lastPrice || 1.0;
+                  
+                  // Inject Sell (Supply)
+                  if (emptyAsks || spreadTooHigh) {
+                      if (state.cityTreasury.cash > 50) {
+                          // Treasury creates 20 units out of thin air (Strategic Reserves)? 
+                          // Or buys them first? For simplicity in "Market Maker" role, we assume pre-stock or printing.
+                          // To respect conservation, let's say Treasury uses 'special reserve' permissions but we track it.
+                          // Or simply: Treasury only sells if it has cash to buy back later (Shorting?).
+                          // Let's stick to simple "Treasury sells slightly above market"
+                          MarketService.submitOrder(state, {
+                              ownerId: 'TREASURY', ownerType: 'TREASURY', itemId,
+                              side: 'SELL', type: 'LIMIT',
+                              price: parseFloat((refPrice * 1.2).toFixed(2)), 
+                              quantity: 20
+                          }, context);
+                      }
+                  }
+                  
+                  // Inject Buy (Demand)
+                  if (emptyBids || spreadTooHigh) {
+                      if (state.cityTreasury.cash > 50) {
+                          MarketService.submitOrder(state, {
+                              ownerId: 'TREASURY', ownerType: 'TREASURY', itemId,
+                              side: 'BUY', type: 'LIMIT',
+                              price: parseFloat(Math.max(0.1, refPrice * 0.8).toFixed(2)), 
+                              quantity: 20
+                          }, context);
+                      }
+                  }
+              }
+          }
           
           if (changed) MarketService.updateBookMetrics(book);
       });
@@ -207,24 +263,22 @@ export class MarketService {
   private static handleOrderRemainder(state: GameState, book: OrderBook, taker: Order, context?: GameContext): void {
       if (taker.remainingQuantity <= 0.0001) {
           taker.status = 'EXECUTED';
-          // Refund dust
           MarketService.AssetLocker.refund(state, taker, 0, context);
           return;
       }
 
       if (taker.type === 'LIMIT') {
           if (taker.status === 'EXECUTED') {
+              // Should not happen, but safe cleanup
               const side = taker.side === 'BUY' ? book.bids : book.asks;
               const idx = side.indexOf(taker);
               if (idx > -1) side.splice(idx, 1);
           }
       } else {
-          // Market Order Remainder: Cancel and Refund strict value
+          // Market Order Remainder: Cancel and Refund
           MarketService.AssetLocker.refund(state, taker, taker.remainingQuantity, context);
-          
           taker.status = 'EXECUTED'; 
           
-          // Remove from book
           const side = taker.side === 'BUY' ? book.bids : book.asks;
           const idx = side.indexOf(taker);
           if (idx > -1) side.splice(idx, 1);
@@ -350,9 +404,9 @@ export class MarketService {
               costToLock = order.price * order.quantity;
           } else {
              const book = state.market[order.itemId];
-             if (!book || book.asks.length === 0) return false;
-             const bestAsk = book.asks[0].price;
-             costToLock = bestAsk * order.quantity * 1.5; // 50% buffer
+             // If book empty, assume recent price or 1.0 + 50% buffer
+             const refPrice = book?.asks[0]?.price || book?.lastPrice || 1.0;
+             costToLock = refPrice * order.quantity * 1.5; 
           }
           
           if (this.debitCash(state, order.ownerId, order.ownerType, costToLock, context)) {
@@ -374,11 +428,23 @@ export class MarketService {
               return true;
           } else if (type === 'COMPANY') {
               const c = context?.companyMap.get(id) || state.companies.find(x => x.id === id);
+              // Companies can go negative temporarily (Credit), but not for Trading Locked Cash?
+              // Let's strict for trading to prevent infinite leverage
               if (!c || c.cash < amount) return false;
               c.cash -= amount;
               return true;
           } else if (type === 'TREASURY') {
-              if (state.cityTreasury.cash < amount) return false;
+              // Treasury can print/overdraft if needed, but lets keep check
+              if (state.cityTreasury.cash < amount) {
+                  // Auto-mint if Treasury empty to prevent deadlock (Seigniorage)
+                  if(state.bank.system !== 'GOLD_STANDARD') {
+                      state.bank.reserves += amount;
+                      state.cityTreasury.cash += amount;
+                      state.economicOverview.totalSystemGold += amount;
+                  } else {
+                      return false;
+                  }
+              }
               state.cityTreasury.cash -= amount;
               return true;
           }
@@ -425,6 +491,9 @@ export class MarketService {
               if (currentInv < qty) return false;
               c.inventory.finished[itemId] = currentInv - qty;
               return true;
+          } else if (type === 'TREASURY') {
+              // Treasury assumes supply
+              return true; 
           }
           return false;
       }

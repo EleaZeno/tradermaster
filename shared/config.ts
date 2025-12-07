@@ -31,13 +31,13 @@ export const ECO_CONSTANTS = {
         LEVERAGE_MAX: 20.0, // Max Bank Leverage
     },
     ECONOMY: {
-        FIXED_COST_PER_LINE: 5.0, // Maintenance cost per production line per day
-        FIXED_COST_PER_LAND: 2.0, // Property tax/maintenance per land token
+        FIXED_COST_PER_LINE: 2.0, // Reduced from 5.0 to improve survival
+        FIXED_COST_PER_LAND: 1.0, // Reduced from 2.0
         WAGE_SENSITIVITY: 0.5,    // How strongly wages react to CPI changes (0.0 - 1.0)
         WAGE_STICKINESS_DAYS: 7,  // Frequency of wage updates
-        MAX_WAGE_CUT: 0.01,       // Max 1% cut per update
+        MAX_WAGE_CUT: 0.05,       // Max 5% cut per update (Increased flexibility)
         DEPRECIATION_RATE: 0.005, // 0.5% daily capital depreciation
-        SCRAP_EFFICIENCY_THRESHOLD: 0.3, // Efficiency below this = scrap
+        SCRAP_EFFICIENCY_THRESHOLD: 0.2, // Lowered scrap threshold
         DEMAND_ELASTICITY: {
           GRAIN: -0.4, // Inelastic (Necessity)
           BREAD: -0.8  // Elastic (Substitutable)

@@ -1,5 +1,6 @@
+
 import React, { memo, useState, useEffect } from 'react';
-import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy, Settings, Terminal, Bell, Play } from 'lucide-react';
+import { TrendingUp, Wallet, Calendar, Pause, Coffee, Trophy, Settings, Terminal, Bell, Play, RotateCcw } from 'lucide-react';
 import { LivingStandard } from '../shared/types';
 import { AchievementsModal } from './modals/AchievementsModal';
 import { SettingsModal } from './modals/SettingsModal';
@@ -68,13 +69,18 @@ export const Header = memo<HeaderProps>(({
   const day = useGameStore(s => s.gameState.day);
   const achievements = useGameStore(s => s.gameState.achievements);
   const lang = useGameStore(s => s.gameState.settings.language);
-  const player = useGameStore(useShallow(s => s.gameState.population.residents.find(r => r.isPlayer)));
-  const setLivingStandard = useGameStore(s => s.setLivingStandard);
-
+  const reset = useGameStore(s => s.reset);
+  
   const unlockedCount = achievements.length;
   const { isDesktop, isMobile } = useResponsive();
   
   const t = (key: string) => getTranslation(key, lang);
+
+  const handleReset = () => {
+      if (confirm(t('header.reset_confirm') || 'Reset Game to Day 1?')) {
+          reset();
+      }
+  };
 
   return (
     <>
@@ -138,6 +144,14 @@ export const Header = memo<HeaderProps>(({
                     title={t('header.pause')}
                 >
                     {isRunning ? <Pause size={16}/> : <Play size={16}/>}
+                </button>
+                
+                <button 
+                    className="p-1.5 rounded-md transition-all text-stone-400 hover:bg-stone-800 hover:text-red-400"
+                    onClick={handleReset}
+                    title={t('header.reset')}
+                >
+                    <RotateCcw size={16}/>
                 </button>
                 
                 <div className="w-px h-4 bg-stone-800 mx-1"></div>

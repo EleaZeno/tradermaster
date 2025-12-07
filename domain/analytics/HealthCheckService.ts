@@ -94,7 +94,9 @@ export class HealthCheckService {
     
     const employed = state.population.total - state.population.unemployed;
     const totalWages = state.companies.reduce((s, c) => s + (c.employees * c.wageOffer), 0);
-    const laborDemand = state.companies.reduce((s, c) => s + Math.max(0, c.targetEmployees - c.employees), 0);
+    
+    // Fix: Only calculate labor demand for ACTIVE companies
+    const laborDemand = activeCompanies.reduce((s, c) => s + Math.max(0, c.targetEmployees - c.employees), 0);
     
     const totalDebt = state.bank.totalLoans;
     const totalEquity = activeCompanies.reduce((s, c) => s + (c.sharePrice * c.totalShares), 0);

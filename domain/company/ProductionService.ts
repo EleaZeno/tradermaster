@@ -29,8 +29,6 @@ export class ProductionService {
                             ((company.landTokens || 0) * ECO_CONSTANTS.ECONOMY.FIXED_COST_PER_LAND);
           
           // Allow negative cash (Incurring Debt to Government/Suppliers)
-          // This ensures bad companies eventually hit the bankruptcy threshold (-500)
-          
           if (company.cash >= fixedCost) {
                TransactionService.transfer(company, 'TREASURY', fixedCost, { treasury: state.cityTreasury, residents: state.population.residents, context });
           } else {
@@ -135,15 +133,22 @@ export class ProductionService {
           const stock = c.inventory.finished[ProductType.BREAD] || 0;
           if (stock > 1) {
                const baseCost = c.avgCost > 0 ? c.avgCost : 1.5;
-               const daysOfInventory = stock / Math.max(1, c.monthlySalesVolume / 30);
+               
+               // Fix: Aggressive Panic Selling Logic
+               // If stock > 30 days of sales, we are in a glut.
+               const dailyVol = Math.max(0.1, c.monthlySalesVolume / 30);
+               const daysOfInventory = stock / dailyVol;
+               
                let inventoryMarkupMod = 0;
-               if (daysOfInventory > 10) inventoryMarkupMod = -0.1;
-               if (daysOfInventory < 3) inventoryMarkupMod = 0.2;
+               if (daysOfInventory > 20) inventoryMarkupMod = -0.3; // Panic sell (below cost if needed)
+               else if (daysOfInventory > 10) inventoryMarkupMod = -0.1;
+               else if (daysOfInventory < 3) inventoryMarkupMod = 0.2;
 
                const markup = 0.2 + (c.pricePremium || 0) + inventoryMarkupMod; 
                const targetPrice = baseCost * (1 + markup);
                
-               const finalPrice = parseFloat(Math.max(0.5, targetPrice).toFixed(2));
+               // Ensure price doesn't go below 0.1
+               const finalPrice = parseFloat(Math.max(0.1, targetPrice).toFixed(2));
                
                MarketService.submitOrder(state, {
                    ownerId: c.id,
@@ -213,8 +218,12 @@ export class ProductionService {
       const employees = employeesByCompany[company.id] || [];
       const actualWorkers = employees.filter(r => r.job === 'WORKER');
       
+      // Calculate Wage Bill
       const wageBill = employees.length * company.wageOffer;
-      if (company.cash < wageBill) return; 
+      
+      // Fix: Zombie Check. Allow operation if cash > -499 (Bankruptcy is -500).
+      // This prevents companies from freezing just before bankruptcy.
+      if (company.cash < -490) return; 
 
       let totalWageCost = 0;
 
@@ -252,14 +261,10 @@ export class ProductionService {
         let output = 2.5 * A * Math.pow(K, 0.3) * Math.pow(L, 0.7);
 
         // CAPACITY CONSTRAINT LOGIC
-        // If actual output exceeds installed capacity, efficiency drops drastically (bottlenecks)
         const installedCapacity = line.maxCapacity || 50; 
         if (output > installedCapacity) {
-            // Soft Cap: Returns diminish rapidly after 100% capacity
-            // Output = Cap + (Surplus ^ 0.5)
             const surplus = output - installedCapacity;
             output = installedCapacity + Math.pow(surplus, 0.5);
-            // This implicitly increases Marginal Cost as you need WAY more L/K to get output
         }
 
         let materialCost = 0;
@@ -269,12 +274,14 @@ export class ProductionService {
             const needed = output * 0.8;
             let currentRaw = company.inventory.raw[ResourceType.GRAIN] || 0;
             
-            if (currentRaw < needed && company.cash > 0) {
+            // Fix: Allow buying materials even if cash is negative, until deep insolvency (-490)
+            if (currentRaw < needed && company.cash > -490) {
                 const book = gameState.market[ResourceType.GRAIN];
                 const bestAsk = book?.asks[0]?.price;
                 
                 if (bestAsk) {
-                   const affordQty = Math.floor(company.cash / bestAsk);
+                   const effectiveCash = Math.max(100, company.cash + 500); // Treat as having credit limit
+                   const affordQty = Math.floor(effectiveCash / bestAsk);
                    const buyAmount = Math.min(Math.ceil(needed - currentRaw + 10), affordQty);
                    
                    if (buyAmount > 0) {
@@ -287,7 +294,6 @@ export class ProductionService {
                             price: bestAsk * 1.05, 
                             quantity: buyAmount
                         }, context);
-                        currentRaw = company.inventory.raw[ResourceType.GRAIN] || 0;
                    }
                 }
             }
@@ -298,7 +304,6 @@ export class ProductionService {
             
             const consumed = actualOutput * 0.8;
             if (consumed > 0) {
-                // Safety Clamp for Floating Point Errors
                 const newRaw = Math.max(0, (company.inventory.raw[ResourceType.GRAIN] || 0) - consumed);
                 company.inventory.raw[ResourceType.GRAIN] = newRaw;
                 

@@ -55,18 +55,26 @@ export class LaborService {
       
       const lastInflation = history[history.length - 1].inflation;
       const effectiveInflation = Math.max(-0.05, lastInflation); 
+      
+      // High unemployment should drive reservation wages down significantly (Phillips Curve Logic)
+      const unemployment = history[history.length - 1].unemployment;
+      // More aggressive downward pressure: if u > 5%, pressure increases linearly
+      const unemploymentPressure = unemployment > 0.05 ? (unemployment - 0.05) * -0.2 : 0;
 
       const sensitivity = ECO_CONSTANTS.ECONOMY.WAGE_SENSITIVITY;
       
       state.population.residents.forEach(res => {
-          const change = res.reservationWage * effectiveInflation * sensitivity;
+          const change = res.reservationWage * (effectiveInflation * sensitivity + unemploymentPressure);
           
           if (change > 0) {
               res.reservationWage += change; 
           } else {
-              res.reservationWage += change * 0.1; 
+              // Reduction in stickiness: If unemployment is super high (>20%), wages crash
+              const stickiness = unemployment > 0.2 ? 0.8 : 0.2; // Allows 80% of the drop if crisis
+              res.reservationWage += change * stickiness; 
           }
           
+          // Absolute floor
           res.reservationWage = Math.max(0.5, res.reservationWage);
       });
   }
@@ -122,11 +130,21 @@ export class LaborService {
     const stock = Object.values(company.inventory.finished).reduce((a, b) => a + (Number(b) || 0), 0);
     const grainPrice = state.resources[ResourceType.GRAIN].currentPrice;
     
-    const isRich = company.cash > 5000;
+    // Determine Company Health
+    const isRich = company.cash > 2000;
+    const isPromising = company.tobinQ > 1.0;
+    const isInsolvent = company.cash < 0; 
     
+    // Hiring Logic: 
+    // 1. If stock is low, hire.
+    // 2. If labor is cheap (below avg wage), hire speculatively (Substitution effect).
+    const laborIsCheap = company.wageOffer < state.population.averageWage * 0.8;
+
     if (stock > 50 && company.employees > 1 && !isRich) {
+        // Only fire if inventory bloated AND not rich
         company.targetEmployees = Math.max(1, company.targetEmployees - 1);
-    } else if ((stock < 15 && company.cash > 200) || isRich) {
+    } else if ((stock < 15 && (company.cash > 100 || isPromising)) || isRich || (laborIsCheap && company.cash > 50)) {
+        // Hire if low stock, rich, or labor is cheap (and have some cash)
         company.targetEmployees++;
     }
 
@@ -135,16 +153,26 @@ export class LaborService {
 
     const effectivePressure = wagePressure * (1 + company.unionTension / 100);
 
-    if (gap > 0 || effectivePressure > 1.05 || (isRich && gap >= 0)) {
-      company.wageMultiplier = Math.min(5.0, company.wageMultiplier + 0.15);
+    // Wage Adjustment Logic
+    if (isInsolvent) {
+        // CRISIS MODE: Cut wages immediately to survive
+        company.wageMultiplier = Math.max(0.5, company.wageMultiplier - 0.2);
+        if (state.day % 3 === 0 && company.employees > 0) state.logs.unshift(`📉 ${company.name} 资金告急，削减工资 (-20%)`);
+    } else if (gap > 0 || effectivePressure > 1.05 || (isRich && gap >= 0)) {
+        // Expansion / Pressure Mode
+        company.wageMultiplier = Math.min(5.0, company.wageMultiplier + 0.15);
     } else if (gap < 0 || (gap === 0 && company.cash < company.wageOffer * 5)) {
-      if (company.unionTension < 30) {
-          company.wageMultiplier = Math.max(1.2, company.wageMultiplier - 0.05);
-      }
+        // Contraction Mode
+        if (company.unionTension < 30) {
+            // Cut faster if not under union pressure
+            company.wageMultiplier = Math.max(0.8, company.wageMultiplier - 0.1);
+        }
     }
     
     let newOffer = parseFloat((grainPrice * company.wageMultiplier).toFixed(2));
-    newOffer = Math.max(newOffer, grainPrice * 1.2);
+    // Hard floor based on grain price
+    const floor = isInsolvent ? grainPrice * 0.5 : grainPrice * 0.9;
+    newOffer = Math.max(newOffer, floor);
     
     company.wageOffer = newOffer;
   }
@@ -176,7 +204,8 @@ export class LaborService {
     const gap = target - workers.length;
 
     // Hiring
-    if (gap > 0 && company.cash > company.wageOffer * 5) {
+    // Relaxed condition: Allow "Credit-Based Hiring" down to -500 cash to prevent death spirals.
+    if (gap > 0 && company.cash > -500) {
       const candidate = allResidents.find(r => 
           r.job === 'FARMER' && 
           r.reservationWage <= company.wageOffer
@@ -190,7 +219,10 @@ export class LaborService {
         
         if (context.employeesByCompany[company.id]) context.employeesByCompany[company.id].push(candidate);
         
-        TransactionService.transfer(company, candidate, company.wageOffer * 0.5, { treasury: state.cityTreasury, residents: allResidents, context });
+        // Signing bonus only if cash positive
+        if (company.cash > 0) {
+            TransactionService.transfer(company, candidate, company.wageOffer * 0.5, { treasury: state.cityTreasury, residents: allResidents, context });
+        }
       }
     } 
     // Firing
@@ -212,7 +244,10 @@ export class LaborService {
         const idx = context.employeesByCompany[company.id]?.indexOf(workerToFire);
         if (idx > -1) context.employeesByCompany[company.id].splice(idx, 1);
         
-        TransactionService.transfer(company, workerToFire, company.wageOffer * 2, { treasury: state.cityTreasury, residents: allResidents, context });
+        // Severance package (only if cash positive, otherwise tough luck)
+        if (company.cash > 0) {
+            TransactionService.transfer(company, workerToFire, company.wageOffer * 2, { treasury: state.cityTreasury, residents: allResidents, context });
+        }
         
         workerToFire.happiness = Math.max(0, workerToFire.happiness - 20);
         state.logs.unshift(`🔥 ${company.name} 解雇了 ${workerToFire.name} (${workerToFire.skill})`);

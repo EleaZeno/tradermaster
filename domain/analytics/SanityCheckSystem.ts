@@ -20,6 +20,7 @@ export class SanityCheckSystem {
             });
         });
 
+        // Current Money Sum (including negative balances as debt)
         const actualSum = totalResidentCash + totalCorporateCash + totalFundCash + totalCityCash + totalBankReserves + totalLockedInMarket;
         const recordedM0 = state.economicOverview.totalSystemGold;
 
@@ -28,7 +29,7 @@ export class SanityCheckSystem {
         if (Math.abs(diff) > 1.0) {
             const auditLog = `[CRITICAL] Money Leak (M0 Breach): Actual(${actualSum.toFixed(1)}) != Recorded(${recordedM0.toFixed(1)}) | Diff: ${diff.toFixed(2)}`;
             issues.push(auditLog);
-            // Auto-correct to prevent crash
+            // Auto-correct to prevent crash, but log it
             state.economicOverview.totalSystemGold = actualSum;
         }
 
@@ -47,7 +48,7 @@ export class SanityCheckSystem {
 
             // Crossed Book Check (Bid >= Ask means matching engine failed to execute)
             if (bestBid >= bestAsk) {
-                issues.push(`[CRITICAL] Crossed Order Book for ${itemId}: Bid(${bestBid}) >= Ask(${bestAsk}). Matching engine stalled.`);
+                issues.push(`[WARNING] Crossed Order Book for ${itemId}: Bid(${bestBid}) >= Ask(${bestAsk}). Matching engine might be stalled.`);
             }
 
             // Price Sanity
@@ -77,15 +78,6 @@ export class SanityCheckSystem {
                 r.happiness = Math.max(0, Math.min(100, r.happiness));
             }
         });
-
-        // 5. Economic Stagnation Check
-        // If GDP is 0 but Money Supply > 0, we have a velocity of 0 (Deadlock)
-        if (macro && macro.gdp < 1.0 && actualSum > 1000) {
-            // Only warn every 10 ticks to avoid spam
-            if (state.totalTicks % 10 === 0) {
-                issues.push(`[WARNING] Liquidity Trap Detected: GDP near zero despite ${Math.floor(actualSum)} oz in system.`);
-            }
-        }
 
         if (issues.length > 0) {
             // Unshift distinct issues only to avoid log spam

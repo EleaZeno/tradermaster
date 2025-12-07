@@ -1,13 +1,14 @@
 
-import React, { useState } from 'react';
-import { ResourceItem, ProductItem, IndustryType } from '../../shared/types';
+import React, { useState, useMemo } from 'react';
+import { ResourceItem, ProductItem, IndustryType, ResourceType, ProductType } from '../../shared/types';
 import { RESOURCE_ICONS } from '../../shared/assets';
 import { Card } from '../../shared/components';
 import { ResponsiveContainer, AreaChart, Area, YAxis } from 'recharts';
 import { CommodityModal } from './CommodityModal';
-import { FuturesPanel } from './FuturesPanel'; // Import added
+import { FuturesPanel } from './FuturesPanel'; 
 import { useGameStore } from '../../shared/store/useGameStore';
 import { useShallow } from 'zustand/react/shallow';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 export const CommoditiesTab: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ResourceItem | ProductItem | null>(null);
@@ -15,6 +16,7 @@ export const CommoditiesTab: React.FC = () => {
   const resources = useGameStore(s => s.gameState.resources);
   const products = useGameStore(s => s.gameState.products);
   const cash = useGameStore(s => s.gameState.cash);
+  const market = useGameStore(s => s.gameState.market);
   
   const trade = useGameStore(s => s.trade);
 
@@ -49,19 +51,42 @@ export const CommoditiesTab: React.FC = () => {
 
   const allItems = [...Object.values(resources), ...Object.values(products)] as (ResourceItem | ProductItem)[];
 
+  // Market Health Status
+  const isMarketFrozen = useMemo(() => {
+      const grainBook = market[ResourceType.GRAIN];
+      const breadBook = market[ProductType.BREAD];
+      // Frozen if no asks in either major market
+      return (grainBook && grainBook.asks.length === 0) || (breadBook && breadBook.asks.length === 0);
+  }, [market]);
+
   return (
     <div className="space-y-8 animate-in fade-in pb-10">
       <div>
-        <h3 className="text-xl font-bold text-stone-100 mb-4 flex items-center gap-2">
-            <span className="bg-emerald-600 w-2 h-6 rounded-full"></span>
-            商品现货 (Spot Commodities)
-        </h3>
+        <div className="flex justify-between items-center mb-4">
+            <h3 className="text-xl font-bold text-stone-100 flex items-center gap-2">
+                <span className="bg-emerald-600 w-2 h-6 rounded-full"></span>
+                商品现货 (Spot Commodities)
+            </h3>
+            {isMarketFrozen ? (
+                <div className="flex items-center gap-2 bg-red-950/50 text-red-400 px-3 py-1 rounded border border-red-900 text-xs font-bold animate-pulse">
+                    <AlertTriangle size={14} /> LIQUIDITY CRISIS: MARKETS FROZEN
+                </div>
+            ) : (
+                <div className="flex items-center gap-2 bg-emerald-950/50 text-emerald-400 px-3 py-1 rounded border border-emerald-900 text-xs font-bold">
+                    <CheckCircle2 size={14} /> MARKET ACTIVE
+                </div>
+            )}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {allItems.map((item) => {
               const color = getTrendColor(item.history);
               const price = item.history.length > 0 ? item.history[item.history.length - 1].close : 0;
               const prevPrice = item.history.length > 10 ? item.history[item.history.length - 10].close : price;
               const change = ((price - prevPrice) / prevPrice) * 100;
+              
+              const book = market[item.id];
+              const asks = book ? book.asks.reduce((s, o) => s + o.remainingQuantity, 0) : 0;
 
               return (
               <Card 
@@ -93,6 +118,9 @@ export const CommoditiesTab: React.FC = () => {
 
                 <div className="absolute bottom-3 left-4 right-4 flex justify-between text-xs text-stone-500 font-mono z-10 pointer-events-none">
                      <span>Own: {item.owned || 0}</span>
+                     <span className={asks === 0 ? "text-red-500 font-bold" : "text-emerald-500"}>
+                        Supply: {Math.floor(asks)}
+                     </span>
                 </div>
               </Card>
           )})}

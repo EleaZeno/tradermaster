@@ -14,6 +14,11 @@ export class ConsumerService {
     const breadPrice = products[ProductType.BREAD].marketPrice;
     const grainPrice = resources[ResourceType.GRAIN].currentPrice;
 
+    // --- MARKET SIGNAL: Check for Shortages ---
+    const breadBook = state.market[ProductType.BREAD];
+    const breadSupply = breadBook ? breadBook.asks.reduce((s, o) => s + (o.remainingQuantity), 0) : 0;
+    const isBreadScarce = breadSupply < 5;
+
     // --- MACRO: Inflation Expectations & Unemployment Risk ---
     const history = state.macroHistory;
     let expectedInflation = 0;
@@ -26,6 +31,9 @@ export class ConsumerService {
         unemploymentRisk = last.unemployment;
     }
 
+    // Calc Average Wealth for Relative Standing
+    const avgWealth = residents.reduce((s,r) => s + r.cash, 0) / residents.length;
+
     residents.forEach(resident => {
       if (['MAYOR', 'DEPUTY_MAYOR'].includes(resident.job)) {
          TransactionService.transfer('TREASURY', resident, resident.salary, { treasury, residents, context });
@@ -33,7 +41,11 @@ export class ConsumerService {
       }
 
       // 2. Budget Determination: Precautionary Savings Model
-      // MPC = Base + k1*InflationExp - k2*UnemploymentRisk*RiskAversion
+      // MPC = Base + k1*InflationExp - k2*UnemploymentRisk*RiskAversion - k3*WealthRatio
+      // Poor people spend nearly 100% (High MPC). Rich people save more (Low MPC).
+      const wealthRatio = Math.min(5, resident.cash / Math.max(1, avgWealth));
+      const wealthDrag = wealthRatio * 0.1; // Richer = lower MPC
+
       let baseMPC = resident.propensityToConsume || 0.8;
       const riskAversion = resident.riskAversion || 1.0;
       
@@ -41,7 +53,7 @@ export class ConsumerService {
       const riskTerm = unemploymentRisk * riskAversion * 2.0; // Precautionary saving
       
       // Allow MPC to go slightly higher to stimulate economy
-      const adjustedMPC = Math.max(0.3, Math.min(1.0, baseMPC + inflationTerm - riskTerm));
+      const adjustedMPC = Math.max(0.1, Math.min(1.0, baseMPC + inflationTerm - riskTerm - wealthDrag));
       
       const nominalBudget = resident.cash * adjustedMPC;
 
@@ -49,7 +61,11 @@ export class ConsumerService {
       const survivalNeed = GAME_CONFIG.DAILY_GRAIN_NEED;
       const costViaGrain = survivalNeed * grainPrice;
       const costViaBread = (survivalNeed * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO) * breadPrice;
-      const isBreadCheaper = costViaBread < costViaGrain;
+      
+      // If Bread is scarce, treat it as infinitely expensive/unavailable
+      const effectiveBreadPrice = isBreadScarce ? breadPrice * 10 : breadPrice;
+      
+      const isBreadCheaper = costViaBread < costViaGrain && !isBreadScarce;
       const subsistenceCost = Math.min(costViaGrain, costViaBread);
 
       let discretionaryIncome = nominalBudget - subsistenceCost;
@@ -61,18 +77,17 @@ export class ConsumerService {
           // SURVIVAL MODE: Spend nearly all cash if needed
           const emergencyBudget = resident.cash * 0.95; 
           if (isBreadCheaper) {
-              qBread = emergencyBudget / Math.max(0.1, breadPrice);
+              qBread = emergencyBudget / Math.max(0.1, effectiveBreadPrice);
           } else {
               qGrain = emergencyBudget / Math.max(0.1, grainPrice);
           }
       } else {
-          // COMFORT MODE: Bias towards Bread as it is "higher quality"
-          // Assume Bread has higher utility weight if discretionary income exists
+          // COMFORT MODE
           if (isBreadCheaper) {
               qBread += (survivalNeed * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO);
           } else {
-              // If rich enough, buy bread anyway
-              if (discretionaryIncome > costViaBread * 2) {
+              // If rich enough, buy bread anyway unless scarce
+              if (discretionaryIncome > costViaBread * 2 && !isBreadScarce) {
                   qBread += (survivalNeed * GAME_CONFIG.BREAD_SUBSTITUTE_RATIO);
               } else {
                   qGrain += survivalNeed;
@@ -94,7 +109,12 @@ export class ConsumerService {
           const spendBread = discretionaryIncome * (alphaBread / sumGoodsAlpha);
           const spendGrain = discretionaryIncome * (alphaGrain / sumGoodsAlpha);
 
-          qBread += spendBread / Math.max(0.1, breadPrice);
+          if (!isBreadScarce) {
+              qBread += spendBread / Math.max(0.1, effectiveBreadPrice);
+          } else {
+              // Redirect bread budget to grain if bread is scarce
+              qGrain += spendBread / Math.max(0.1, grainPrice);
+          }
           qGrain += spendGrain / Math.max(0.1, grainPrice);
       }
 

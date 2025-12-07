@@ -51,6 +51,7 @@ export interface GameSlice {
   setGameSpeed: (speed: number) => void;
   tick: () => void;
   setPolicyOverride: (overrides: Partial<PolicyOverrides>) => void;
+  reset: () => void;
 }
 
 export type GameStore = GameSlice & UISlice & MarketSlice & PlayerSlice & CompanySlice & BankSlice;
@@ -516,5 +517,15 @@ export const createGameSlice: StateCreator<GameStore, [["zustand/immer", never]]
             state.gameState.logs.unshift(`🏆 成就解锁: ${meta?.name}`);
         });
     }
+  }),
+
+  reset: () => set((state) => {
+      state.isRunning = false;
+      state.gameSpeed = 1;
+      // Reset logic: Deep copy the initial state to ensure clean start
+      state.gameState = JSON.parse(JSON.stringify(INITIAL_STATE));
+      state.gameState.logs = ["🔄 System Reset (Factory Settings)"];
+      state.gameState.events = [];
+      state.gameState.notifications = [];
   }),
 });

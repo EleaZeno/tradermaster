@@ -293,6 +293,9 @@ export interface Company {
   monthlyProductionVolume: number;
   reports: FinancialReport[];
   history: Candle[]; 
+  
+  // New: Track Zombie State
+  consecutiveNegativeCashDays: number;
 }
 
 export interface Fund {
@@ -612,4 +615,3 @@ export interface GameContext {
     employeesByCompany: Record<string, Resident[]>;
     residentsByJob: Record<string, Resident[]>;
 }
-    

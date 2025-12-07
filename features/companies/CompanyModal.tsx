@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart, Bot, Sparkles, PieChart, Layers, Scale } from 'lucide-react';
+import { TrendingUp, Users, Briefcase, Activity, Anchor, BarChart, Bot, Sparkles, PieChart, Layers, Scale, Skull } from 'lucide-react';
 import { ProductType, ResourceType, IndustryType } from '../../shared/types';
 import { Card, Button } from '../../shared/components';
 import { RESOURCE_ICONS } from '../../shared/assets';
@@ -54,6 +55,11 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
   const assets = company.cash + (company.landTokens || 0) * 100 + Object.values(company.inventory.finished).reduce<number>((a,b)=>a+(Number(b)||0),0);
   const leverage = debt / (equity || 1);
   const creditScore = company.kpis.creditScore || 0;
+  
+  // Zombie Status Calc
+  const zombieDays = company.consecutiveNegativeCashDays || 0;
+  const maxZombieDays = 14;
+  const healthPercent = Math.max(0, 100 - (zombieDays / maxZombieDays) * 100);
 
   return (
     <motion.div 
@@ -71,6 +77,18 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
       >
         <Card className={`w-full bg-stone-900 border-stone-700 max-h-[90vh] overflow-y-auto ${company.isBankrupt ? 'grayscale opacity-90' : ''}`} title={`公司控制台: ${company.name}`}>
           {company.isBankrupt && <div className="bg-red-900/80 text-white text-center p-2 mb-4 font-bold rounded">🚫 已破产</div>}
+          
+          {zombieDays > 0 && !company.isBankrupt && (
+              <div className="mb-4 bg-stone-950 p-3 rounded border border-red-900/50">
+                  <div className="flex justify-between items-center mb-1 text-xs text-red-400 font-bold">
+                      <span className="flex items-center gap-1"><Skull size={12}/> SOLVENCY WARNING (Zombie Status)</span>
+                      <span>{zombieDays} / {maxZombieDays} Days Insolvent</span>
+                  </div>
+                  <div className="w-full bg-stone-800 h-2 rounded-full overflow-hidden">
+                      <div className="bg-red-600 h-full transition-all duration-500" style={{ width: `${healthPercent}%` }}></div>
+                  </div>
+              </div>
+          )}
 
           <div className="flex items-center gap-4 mb-4">
               <span className={`px-2 py-0.5 rounded text-xs border font-bold ${getStageColor(company.stage || 'STARTUP')}`}>
@@ -255,7 +273,9 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({
                 <div className="grid grid-cols-3 gap-2 text-sm">
                     <div className="bg-stone-950 p-2 rounded border border-stone-800">
                         <div className="text-stone-500 text-xs">现金</div>
-                        <div className="text-emerald-400 font-mono">{Math.floor(company.cash)} oz</div>
+                        <div className={`font-mono ${company.cash < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                            {Math.floor(company.cash)} oz
+                        </div>
                     </div>
                     <div className="bg-stone-950 p-2 rounded border border-stone-800">
                         <div className="text-stone-500 text-xs">原料库存</div>

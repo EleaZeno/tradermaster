@@ -48,9 +48,11 @@ export class BankingService {
         BankingService.processLoans(state, bank, context);
 
         // M2 Calculation
-        const totalResidentCash = state.population.residents.reduce((s, r) => s + r.cash, 0);
-        const totalCorporateCash = state.companies.reduce((s, c) => s + c.cash, 0);
-        const totalTreasuryCash = state.cityTreasury.cash;
+        // Important: Clamp negative cash to 0. Negative cash represents debt (Accounts Payable),
+        // not a reduction in the circulating medium.
+        const totalResidentCash = state.population.residents.reduce((s, r) => s + Math.max(0, r.cash), 0);
+        const totalCorporateCash = state.companies.reduce((s, c) => s + Math.max(0, c.cash), 0);
+        const totalTreasuryCash = Math.max(0, state.cityTreasury.cash);
         
         bank.moneySupply = bank.totalDeposits + totalResidentCash + totalCorporateCash + totalTreasuryCash; 
         bank.creditMultiplier = safeDivide(bank.moneySupply, Math.max(1, bank.reserves));
@@ -148,20 +150,27 @@ export class BankingService {
         let score = 100;
         let reasons = [];
 
+        // Relaxed Scoring: Allow borrowing if cash is negative but assets are positive
         if (comp.lastProfit < 0) {
+            score -= 5;
+        }
+        
+        // Penalize zombie-like state but don't outright ban if they have assets
+        if (comp.cash < 0) {
             score -= 10;
         }
-        if (leverage > 3.0) {
+
+        if (leverage > 4.0) { // Relaxed from 3.0
             score -= 40;
-            reasons.push("杠杆过高 (>3.0)");
+            reasons.push("杠杆过高 (>4.0)");
         }
-        if (totalDebt > assetsValue * 0.9) {
+        if (totalDebt > assetsValue * 1.1) { // Allow slight over-leverage if asset value dropped
             score -= 50;
             reasons.push("抵押品不足");
         }
 
-        const creditLimit = Math.max(0, assetsValue * 0.7 - totalDebt);
-        const approved = score > 40 && creditLimit > 10;
+        const creditLimit = Math.max(0, assetsValue * 0.8 - totalDebt);
+        const approved = score > 35 && creditLimit > 10; // Lowered score threshold
         
         return {
             approved,
@@ -180,7 +189,8 @@ export class BankingService {
         const bankEquity = bankAssets - bankLiabilities;
         const totalRWA = bank.loans.reduce((sum, loan) => sum + (loan.remainingPrincipal * ECO_CONSTANTS.BANKING.RISK_WEIGHT_RWA), 0); 
         const currentCAR = safeDivide(bankEquity, totalRWA, 1.0);
-        const isCreditCrunch = currentCAR < ECO_CONSTANTS.BANKING.CREDIT_CRUNCH_TRIGGER && bank.system !== 'GOLD_STANDARD';
+        // Lower crunch trigger to 4%
+        const isCreditCrunch = currentCAR < 0.04 && bank.system !== 'GOLD_STANDARD';
 
         if (isCreditCrunch && state.day % 7 === 0) {
             state.logs.unshift(`📉 信贷紧缩 (Credit Crunch): 银行资本不足 (CAR: ${(currentCAR*100).toFixed(1)}%)，停止放贷。`);
@@ -212,7 +222,8 @@ export class BankingService {
             });
 
             // Borrowing Logic
-            if (comp.cash < 200 || (comp.stage === 'GROWTH' && comp.cash < 1000)) {
+            // Allow borrowing if cash < 500 (was 200), companies need runway
+            if (comp.cash < 500) {
                 if (isCreditCrunch) return;
 
                 const { approved, reason, score, limit } = BankingService.assessCredit(comp, bank);
@@ -222,12 +233,12 @@ export class BankingService {
                 if (approved) {
                     if (strategy.canLend(bank, 100)) {
                         const marketRate = bank.yieldCurve.rate30d + (score < 80 ? 0.02 : 0);
-                        const borrowAmount = Math.min(200, limit);
+                        const borrowAmount = Math.min(300, limit); // Increased cap to 300
                         
-                        const expectedROI = comp.kpis.roa || 0;
+                        // Always borrow if broke
                         const desperation = comp.cash < 50;
 
-                        if (desperation || expectedROI > marketRate || comp.cash > 500) {
+                        if (desperation || comp.kpis.roa > marketRate) {
                             const newLoan: Loan = {
                                 id: `ln_${Date.now()}_${comp.id}`,
                                 borrowerId: comp.id,

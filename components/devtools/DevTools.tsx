@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../../shared/store/useGameStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Terminal, X, Database, Activity, FileText, FastForward, Play, Pause, Bug, Copy, Brain, RefreshCw, Check, AlertTriangle, Info } from 'lucide-react';
+import { Terminal, X, Database, Activity, FileText, FastForward, Play, Pause, Bug, Copy, Brain, RefreshCw, Check, AlertTriangle, Info, RotateCcw } from 'lucide-react';
 import { aiService } from '../../infrastructure/ai/GeminiAdapter';
 import { HealthCheckService } from '../../domain/analytics/HealthCheckService';
 import { CalibrationService } from '../../features/validation/CalibrationService';
@@ -30,6 +30,7 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
   const start = useGameStore(s => s.start);
   const stop = useGameStore(s => s.stop);
   const tick = useGameStore(s => s.tick);
+  const reset = useGameStore(s => s.reset);
 
   // Keyboard shortcut
   useEffect(() => {
@@ -72,10 +73,14 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
       const healthSnapshot = HealthCheckService.captureSnapshot(gameState);
       
       setAnalysisStatus("Validating Stylized Facts...");
+      // Capturing full calibration suite for AI analysis
       const validation = {
-          phillips: CalibrationService.checkPhillipsCurve(gameState.macroHistory),
-          okun: CalibrationService.checkOkunsLaw(gameState.macroHistory),
-          qtm: CalibrationService.checkQuantityTheoryOfMoney(gameState.macroHistory)
+          phillipsCurve: CalibrationService.checkPhillipsCurve(gameState.macroHistory),
+          okunsLaw: CalibrationService.checkOkunsLaw(gameState.macroHistory),
+          quantityTheoryMoney: CalibrationService.checkQuantityTheoryOfMoney(gameState.macroHistory),
+          consumptionSmoothing: CalibrationService.checkConsumptionSmoothing(gameState.macroHistory),
+          firmSizeZipf: CalibrationService.checkFirmSize(gameState),
+          mpcDistribution: CalibrationService.checkMPC(gameState)
       };
 
       setAnalysisStatus("Serializing Context...");
@@ -83,7 +88,8 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
           meta: {
               day: gameState.day,
               tick: gameState.totalTicks,
-              version: "3.2.0-Physics-Auditor",
+              version: "3.4.0-Physics-Auditor-Plus",
+              cycle: gameState.businessCycle,
               timestamp: new Date().toISOString()
           },
           healthIndex: gameState.economicHealth,
@@ -109,14 +115,25 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
               deposits: gameState.bank.deposits.length
           },
           treasury: gameState.cityTreasury,
+          land: {
+              totalPlots: gameState.map.length,
+              ownedPlots: gameState.map.filter(p => p.ownerId).length
+          },
+          futures: {
+              totalContracts: gameState.futures.length,
+              longs: gameState.futures.filter(f => f.type === 'LONG').length,
+              shorts: gameState.futures.filter(f => f.type === 'SHORT').length
+          },
           companies: gameState.companies.map(c => ({
+              id: c.id,
               name: c.name,
               cash: c.cash,
               profit: c.lastProfit,
               employees: c.employees,
               inventory: c.inventory,
               isBankrupt: c.isBankrupt,
-              tobinQ: c.tobinQ
+              tobinQ: c.tobinQ,
+              zombieDays: c.consecutiveNegativeCashDays
           }))
       }, null, 2);
   };
@@ -183,6 +200,9 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
                     <button className="p-1 hover:bg-stone-800 rounded text-stone-400" onClick={() => handleSkip(10)} title="Skip 10 ticks"><FastForward size={14}/></button>
                     <button className="p-1 hover:bg-stone-800 rounded text-stone-400" onClick={isRunning ? stop : start}>
                         {isRunning ? <Pause size={14}/> : <Play size={14}/>}
+                    </button>
+                    <button className="p-1 hover:bg-stone-800 rounded text-stone-400" onClick={reset} title="Reset">
+                        <RotateCcw size={14}/>
                     </button>
                     <button onClick={onToggle} className="p-1 hover:bg-red-900/50 hover:text-red-400 rounded"><X size={16}/></button>
                 </div>
@@ -275,7 +295,7 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
                                 {/* Right: AI Analysis Report */}
                                 <div className="border border-stone-800 rounded bg-stone-900/30 flex flex-col overflow-hidden relative">
                                     <div className="bg-stone-900 px-3 py-2 text-indigo-400 font-bold text-xs border-b border-stone-800 flex justify-between items-center">
-                                        <span>Gemini 诊断报告 (v3.2)</span>
+                                        <span>Gemini 诊断报告 (v3.4)</span>
                                         {aiReport && (
                                             <button 
                                                 onClick={handleCopyReport} 
@@ -290,14 +310,14 @@ export const DevTools: React.FC<DevToolsProps> = ({ isOpen, onToggle }) => {
                                         {analyzing ? (
                                             <div className="flex flex-col items-center justify-center h-full text-indigo-500 gap-2">
                                                 <RefreshCw className="animate-spin" size={24}/>
-                                                <span>正在进行深度诊断...</span>
+                                                <span>Gemini 正在分析 M0 守恒与菲利普斯曲线...</span>
                                                 <span className="text-xs text-indigo-400/50">{analysisStatus}</span>
                                             </div>
                                         ) : aiReport ? (
                                             renderMarkdown(aiReport)
                                         ) : (
                                             <div className="text-stone-600 italic text-center mt-10">
-                                                点击 "AI 代码逻辑审计" 让 Gemini 分析当前的经济死锁或数值溢出问题。
+                                                点击 "AI 代码逻辑审计" 让 Gemini 分析当前的经济死锁、数值溢出或宏观失衡。
                                                 <br/><br/>
                                                 或者点击 "复制完整上下文" 手动粘贴给 AI 助手。
                                             </div>
